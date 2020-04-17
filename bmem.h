@@ -204,15 +204,15 @@ static inline void  heapFree(void *mem) {
 void *           debugAlloc(size_t size, const char *file, const char *func, int line);
 void *           debugRealloc(void *mem, size_t size, const char *file, const char *func, int line);
 void             debugFree(void *mem, const char *file, const char *func, int line);
-void             debugHeapDump();
-HeapBlockInfo *  debugGetFirstHeapBlock();
-HeapStats        debugGetHeapStats();
+void             debugHeapDump(void);
+HeapBlockInfo *  debugGetFirstHeapBlock(void);
+HeapStats        debugGetHeapStats(void);
 
 void *           talloc(size_t size, size_t align);
 char *           tsprintf(const char *format, ...);
-int              tempMark();
+int              tempMark(void);
 void             tempReset(int mark);
-TempMemStats     getTempMemStats();
+TempMemStats     getTempMemStats(void);
 
 #if defined(B_ALWAYS_LEAK_CHECK) || (!defined(B_DONT_LEAK_CHECK) && !defined(NDEBUG))
 #	define malloc(size)       debugAlloc(size, __FILE__, __func__, __LINE__)
@@ -409,7 +409,7 @@ void debugFree(void *mem, const char *file, const char *func, int line) {
 	heapFree(block);
 }
 
-void debugHeapDump() {
+void debugHeapDump(void) {
 	HeapBlockInfo *block = debugGetFirstHeapBlock();
 	if (!block) {
 		printf("no allocated memory\n");
@@ -442,11 +442,11 @@ void debugHeapDump() {
 	} while (block != b__firstHeapBlock);
 }
 
-HeapBlockInfo *debugGetFirstHeapBlock() {
+HeapBlockInfo *debugGetFirstHeapBlock(void) {
 	return b__firstHeapBlock;
 }
 
-HeapStats debugGetHeapStats() {
+HeapStats debugGetHeapStats(void) {
 	return b__heapStats;
 }
 
@@ -498,7 +498,7 @@ char *tsprintf(const char *format, ...) {
 	return string;
 }
 
-int tempMark() {
+int tempMark(void) {
 	return (int)b__tempMemStats.currBytesAlloced;
 }
 
@@ -528,7 +528,7 @@ void tempReset(int mark) {
 	b__tempMemStats.numAllocsSinceFullReset = 0;
 }
 
-TempMemStats getTempMemStats() {
+TempMemStats getTempMemStats(void) {
 	return b__tempMemStats;
 }
 
