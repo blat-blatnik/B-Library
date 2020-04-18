@@ -141,10 +141,23 @@
     can define this so that something like:
 	B_THREAD_LOCAL int x;
 	will correctly compile on your compiler.
+
+  #define B_MEM_PREFIX(name) [your-name-prefix] ## name
+  #define B_PREFIX(name) [your-name-prefix] ## name
+  - Add a prefix to all functions/variables/types declared by this file.
+    Useful for avoiding name-conflicts. By default no prefix is added.
 */
 
 #ifndef B_MEM_DEFINITION
 #define B_MEM_DEFINITION
+
+#ifndef B_MEM_PREFIX
+#   ifdef B_PREFIX
+#       define B_MEM_PREFIX(name) B_PREFIX(name)
+#   else
+#       define B_MEM_PREFIX(name) name
+#   endif
+#endif
 
 /* we NEED to include stdlib.h BEFORE setting up the
    macro replacements for malloc, realloc, and free.
@@ -153,16 +166,16 @@
 #include <stddef.h>
 #include <time.h>
 
-typedef struct HeapBlockInfo {
+typedef struct B_MEM_PREFIX(HeapBlockInfo) {
 	size_t      size,  size0; /* allocation size in bytes */
 	time_t      time,  time0; /* allocation timestamp */
 	const char *file, *file0; /* file where allocation occured */
 	const char *func, *func0; /* function where allocation occured */
 	int         line,  line0; /* line where allocation occured */
-	struct HeapBlockInfo *prev, *next;
-} HeapBlockInfo;
+	struct B_MEM_PREFIX(HeapBlockInfo) *prev, *next;
+} B_MEM_PREFIX(HeapBlockInfo);
 
-typedef struct HeapStats {
+typedef struct B_MEM_PREFIX(HeapStats) {
 	size_t totalNumAllocs;    /* number of calls to malloc since program start */
 	size_t totalNumReallocs;  /* number of calls to realloc ... */
 	size_t totalNumFrees;     /* number of calls to free    ... */
@@ -173,9 +186,9 @@ typedef struct HeapStats {
 	size_t maxNumAllocs;      /* highest number of active heap allocations ever reached during runtime */
 	size_t maxBytesAlloced;   /* highest number of active heap allocated bytes ... */
 	double avgAllocLifespan;  /* average time in seconds allocations last before being freed */
-} HeapStats;
+} B_MEM_PREFIX(HeapStats);
 
-typedef struct TempMemStats {
+typedef struct B_MEM_PREFIX(TempMemStats) {
 	size_t totalNumAllocs;     /* number of calls to tempAlloc since program start */
 	size_t totalNumFullResets; /* number of calls to tempReset(*0*) ... */
 	size_t totalBytesAlloced;  /* number of temp bytes allocated    ... */
@@ -187,37 +200,37 @@ typedef struct TempMemStats {
 	size_t bytesAllocedSinceFullReset;   /* number of temp bytes allocated ... */
 	double avgNumAllocsPerResetCycle;    /* average number of calls to tempAlloc during a single reset cycle */
 	double avgBytesAllocedPerResetCycle; /* average number of temp bytes allocated ... */
-} TempMemStats;
+} B_MEM_PREFIX(TempMemStats);
 
 /* these are always exactly the same as the stdlib malloc, realloc, and free
    so that we can redefine them AND still be able to access them with these.. */
-static inline void *heapAlloc(size_t size) {
+static inline void *B_MEM_PREFIX(heapAlloc)(size_t size) {
 	return malloc(size);
 }
-static inline void *heapRealloc(void *mem, size_t size) {
+static inline void *B_MEM_PREFIX(heapRealloc)(void *mem, size_t size) {
 	return realloc(mem, size);
 }
-static inline void  heapFree(void *mem) {
+static inline void  B_MEM_PREFIX(heapFree)(void *mem) {
 	free(mem);
 }
 
-void *           debugAlloc(size_t size, const char *file, const char *func, int line);
-void *           debugRealloc(void *mem, size_t size, const char *file, const char *func, int line);
-void             debugFree(void *mem, const char *file, const char *func, int line);
-void             debugHeapDump(void);
-HeapBlockInfo *  debugGetFirstHeapBlock(void);
-HeapStats        debugGetHeapStats(void);
+void *                         B_MEM_PREFIX(debugAlloc)(size_t size, const char *file, const char *func, int line);
+void *                         B_MEM_PREFIX(debugRealloc)(void *mem, size_t size, const char *file, const char *func, int line);
+void                           B_MEM_PREFIX(debugFree)(void *mem, const char *file, const char *func, int line);
+void                           B_MEM_PREFIX(debugHeapDump)(void);
+B_MEM_PREFIX(HeapBlockInfo) *  B_MEM_PREFIX(debugGetFirstHeapBlock)(void);
+B_MEM_PREFIX(HeapStats)        B_MEM_PREFIX(debugGetHeapStats)(void);
 
-void *           talloc(size_t size, size_t align);
-char *           tsprintf(const char *format, ...);
-int              tempMark(void);
-void             tempReset(int mark);
-TempMemStats     getTempMemStats(void);
+void *                         B_MEM_PREFIX(talloc)(size_t size, size_t align);
+char *                         B_MEM_PREFIX(tsprintf)(const char *format, ...);
+int                            B_MEM_PREFIX(tempMark)(void);
+void                           B_MEM_PREFIX(tempReset)(int mark);
+B_MEM_PREFIX(TempMemStats)     B_MEM_PREFIX(getTempMemStats)(void);
 
 #if defined(B_ALWAYS_LEAK_CHECK) || (!defined(B_DONT_LEAK_CHECK) && !defined(NDEBUG))
-#	define malloc(size)       debugAlloc(size, __FILE__, __func__, __LINE__)
-#	define realloc(mem, size) debugRealloc(mem, size, __FILE__, __func__, __LINE__)
-#	define free(mem)          debugFree(mem, __FILE__, __func__, __LINE__)
+#	define malloc(size)       B_MEM_PREFIX(debugAlloc)(size, __FILE__, __func__, __LINE__)
+#	define realloc(mem, size) B_MEM_PREFIX(debugRealloc)(mem, size, __FILE__, __func__, __LINE__)
+#	define free(mem)          B_MEM_PREFIX(debugFree)(mem, __FILE__, __func__, __LINE__)
 #endif
 
 #endif /* !B_MEM_DEFINITION */
@@ -247,7 +260,7 @@ TempMemStats     getTempMemStats(void);
 
 #ifndef B_LOG
 #	ifdef B_DEBUG_DEFINITION
-#		define B_LOG(message) debugLog(message)
+#		define B_LOG(message) B_DEBUG_PREFIX(debugLog)(message)
 #	else
 #		define B_LOG(message) printf(message)
 #	endif
@@ -265,18 +278,18 @@ TempMemStats     getTempMemStats(void);
 #include <stdio.h>
 #include <stdarg.h>
 
-static HeapBlockInfo *b__firstHeapBlock;
-static HeapStats b__heapStats;
-static B_THREAD_LOCAL TempMemStats b__tempMemStats;
+static B_MEM_PREFIX(HeapBlockInfo) *b__firstHeapBlock;
+static B_MEM_PREFIX(HeapStats) b__heapStats;
+static B_THREAD_LOCAL B_MEM_PREFIX(TempMemStats) b__tempMemStats;
 static B_THREAD_LOCAL char b__tempMem[B_TEMP_MEM_SIZE];
 
 typedef char b__WaterMark[8];
 
 static int b__checkForOverrun(void *mem) {
 	char *memory = (char *)mem;
-	HeapBlockInfo *block = (HeapBlockInfo *)(memory - sizeof(HeapBlockInfo) - sizeof(b__WaterMark));
+	B_MEM_PREFIX(HeapBlockInfo) *block = (B_MEM_PREFIX(HeapBlockInfo) *)(memory - sizeof(B_MEM_PREFIX(HeapBlockInfo)) - sizeof(b__WaterMark));
 
-	b__WaterMark *header = (b__WaterMark *)(memory - sizeof(HeapBlockInfo));
+	b__WaterMark *header = (b__WaterMark *)(memory - sizeof(B_MEM_PREFIX(HeapBlockInfo)));
 	b__WaterMark *footer = (b__WaterMark *)(memory + block->size);
 	int headerGood = memcmp(header, "ORHEADER", sizeof(b__WaterMark)) == 0;
 	int footerGood = memcmp(footer, "ORFOOTER", sizeof(b__WaterMark)) == 0;
@@ -284,12 +297,12 @@ static int b__checkForOverrun(void *mem) {
 	return headerGood && footerGood;
 }
 
-void *debugAlloc(size_t size, const char *file, const char *func, int line) {
+void *B_MEM_PREFIX(debugAlloc)(size_t size, const char *file, const char *func, int line) {
 	if (size == 0)
 		return NULL;
 
-	char *mem = (char *)heapAlloc(size + sizeof(HeapBlockInfo) + 2 * sizeof(b__WaterMark));
-	HeapBlockInfo *block = (HeapBlockInfo *)mem;
+	char *mem = (char *)B_MEM_PREFIX(heapAlloc)(size + sizeof(B_MEM_PREFIX(HeapBlockInfo)) + 2 * sizeof(b__WaterMark));
+	B_MEM_PREFIX(HeapBlockInfo) *block = (B_MEM_PREFIX(HeapBlockInfo) *)mem;
 	block->size0 = size;
 	block->file0 = file;
 	block->func0 = func;
@@ -301,8 +314,8 @@ void *debugAlloc(size_t size, const char *file, const char *func, int line) {
 	block->line  = line;
 	block->time  = block->time0;
 
-	b__WaterMark *header = (b__WaterMark *)(mem + sizeof(HeapBlockInfo));
-	b__WaterMark *footer = (b__WaterMark *)(mem + sizeof(HeapBlockInfo) + sizeof(b__WaterMark) + size);
+	b__WaterMark *header = (b__WaterMark *)(mem + sizeof(B_MEM_PREFIX(HeapBlockInfo)));
+	b__WaterMark *footer = (b__WaterMark *)(mem + sizeof(B_MEM_PREFIX(HeapBlockInfo)) + sizeof(b__WaterMark) + size);
 	memcpy(header, "ORHEADER", sizeof(b__WaterMark));
 	memcpy(footer, "ORFOOTER", sizeof(b__WaterMark));
 
@@ -326,24 +339,24 @@ void *debugAlloc(size_t size, const char *file, const char *func, int line) {
 	if (b__heapStats.currBytesAlloced > b__heapStats.maxBytesAlloced)
 		b__heapStats.maxBytesAlloced = b__heapStats.currBytesAlloced;
 
-	return mem + sizeof(HeapBlockInfo) + sizeof(b__WaterMark);
+	return mem + sizeof(B_MEM_PREFIX(HeapBlockInfo)) + sizeof(b__WaterMark);
 }
 
-void *debugRealloc(void *mem, size_t size, const char *file, const char *func, int line) {
+void *B_MEM_PREFIX(debugRealloc)(void *mem, size_t size, const char *file, const char *func, int line) {
 	if (size == 0) {
-		debugFree(mem, file, func, line);
+		B_MEM_PREFIX(debugFree)(mem, file, func, line);
 		return NULL;
 	}
 	if (mem == NULL)
-		return debugAlloc(size, file, func, line);
+		return B_MEM_PREFIX(debugAlloc)(size, file, func, line);
 
 	int isOverrun = b__checkForOverrun(mem);
 	B_ASSERT(!isOverrun);
 
-	char *memory = (char *)heapRealloc(
-		(char *)mem - sizeof(b__WaterMark) - sizeof(HeapBlockInfo),
-		size + sizeof(HeapBlockInfo) + 2 * sizeof(b__WaterMark));
-	HeapBlockInfo *block = (HeapBlockInfo *)memory;
+	char *memory = (char *)B_MEM_PREFIX(heapRealloc)(
+		(char *)mem - sizeof(b__WaterMark) - sizeof(B_MEM_PREFIX(HeapBlockInfo)),
+		size + sizeof(B_MEM_PREFIX(HeapBlockInfo)) + 2 * sizeof(b__WaterMark));
+	B_MEM_PREFIX(HeapBlockInfo) *block = (B_MEM_PREFIX(HeapBlockInfo) *)memory;
 
 	/* block memory address changed so we need to update neighbors */
 	block->prev->next = block;
@@ -371,20 +384,20 @@ void *debugRealloc(void *mem, size_t size, const char *file, const char *func, i
 	if (b__heapStats.totalBytesAlloced > b__heapStats.maxBytesAlloced)
 		b__heapStats.maxBytesAlloced = b__heapStats.totalBytesAlloced;
 
-	return memory + sizeof(HeapBlockInfo) + sizeof(b__WaterMark);
+	return memory + sizeof(B_MEM_PREFIX(HeapBlockInfo)) + sizeof(b__WaterMark);
 }
 
-void debugFree(void *mem, const char *file, const char *func, int line) {
+void B_MEM_PREFIX(debugFree)(void *mem, const char *file, const char *func, int line) {
 	if (!mem)
 		return;
 
 	int isOverrun = b__checkForOverrun(mem);
 	B_ASSERT(!isOverrun);
 
-	HeapBlockInfo *block = (HeapBlockInfo *)((char *)mem - sizeof(b__WaterMark) - sizeof(HeapBlockInfo));
+	B_MEM_PREFIX(HeapBlockInfo) *block = (B_MEM_PREFIX(HeapBlockInfo) *)((char *)mem - sizeof(b__WaterMark) - sizeof(B_MEM_PREFIX(HeapBlockInfo)));
 
 	if (block->next == block->prev) { /* either 1 or 2 active allocations */
-		HeapBlockInfo *other = block->next;
+		B_MEM_PREFIX(HeapBlockInfo) *other = block->next;
 		other->next = other;
 		other->prev = other;
 	} else {
@@ -406,11 +419,11 @@ void debugFree(void *mem, const char *file, const char *func, int line) {
 	double lifespan = difftime(block->time, block->time0);
 	b__heapStats.avgAllocLifespan += (lifespan - b__heapStats.avgAllocLifespan) / b__heapStats.totalNumFrees;
 
-	heapFree(block);
+	B_MEM_PREFIX(heapFree)(block);
 }
 
-void debugHeapDump(void) {
-	HeapBlockInfo *block = debugGetFirstHeapBlock();
+void B_MEM_PREFIX(debugHeapDump)(void) {
+	B_MEM_PREFIX(HeapBlockInfo) *block = B_MEM_PREFIX(debugGetFirstHeapBlock)();
 	if (!block) {
 		printf("no allocated memory\n");
 		return;
@@ -442,11 +455,11 @@ void debugHeapDump(void) {
 	} while (block != b__firstHeapBlock);
 }
 
-HeapBlockInfo *debugGetFirstHeapBlock(void) {
+B_MEM_PREFIX(HeapBlockInfo) *B_MEM_PREFIX(debugGetFirstHeapBlock)(void) {
 	return b__firstHeapBlock;
 }
 
-HeapStats debugGetHeapStats(void) {
+B_MEM_PREFIX(HeapStats) B_MEM_PREFIX(debugGetHeapStats)(void) {
 	return b__heapStats;
 }
 
@@ -456,7 +469,7 @@ static size_t b__roundUpPow2(size_t x, size_t pow2) {
 	return (x + pow2) & ~(pow2 - 1);
 }
 
-void *talloc(size_t size, size_t align) {
+void *B_MEM_PREFIX(talloc)(size_t size, size_t align) {
 	if (align == 0)
 		align = 8;
 
@@ -484,13 +497,13 @@ void *talloc(size_t size, size_t align) {
 	return &b__tempMem[memStart];
 }
 
-char *tsprintf(const char *format, ...) {
+char *B_MEM_PREFIX(tsprintf)(const char *format, ...) {
 	va_list args;
 	va_start(args, format);
 	int length = 1 + vsnprintf(NULL, 0, format, args);
 	va_end(args);
 
-	char *string = (char *)talloc((size_t)length, 1);
+	char *string = (char *)B_MEM_PREFIX(talloc)((size_t)length, 1);
 	va_start(args, format);
 	vsnprintf(string, (size_t)length, format, args);
 	va_end(args);
@@ -498,11 +511,11 @@ char *tsprintf(const char *format, ...) {
 	return string;
 }
 
-int tempMark(void) {
+int B_MEM_PREFIX(tempMark)(void) {
 	return (int)b__tempMemStats.currBytesAlloced;
 }
 
-void tempReset(int mark) {
+void B_MEM_PREFIX(tempReset)(int mark) {
 	size_t newMark = (size_t)mark;
 	size_t currMark = b__tempMemStats.currBytesAlloced;
 	B_ASSERT(newMark <= currMark);
@@ -528,7 +541,7 @@ void tempReset(int mark) {
 	b__tempMemStats.numAllocsSinceFullReset = 0;
 }
 
-TempMemStats getTempMemStats(void) {
+B_MEM_PREFIX(TempMemStats) B_MEM_PREFIX(getTempMemStats)(void) {
 	return b__tempMemStats;
 }
 

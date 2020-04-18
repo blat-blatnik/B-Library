@@ -1,33 +1,112 @@
+/*
+  bfile.h - v0.1 - public domain file utilities
+
+  by Blat Blatnik
+
+  NO WARRANTY IMPLIED - USE AT YOUR OWN RISK
+
+  For licence information see end of file.
+
+  Do this:
+    #define B_FILE_IMPLEMENTATION
+  before you include this file in *ONE* C or C++ file to create the implementation.
+
+  //i.e. it should look something like this:
+  #include ...
+  #include ...
+  #include B_FILE_IMPLEMENTATION
+  #include "bfile.h"
+
+  NOTE: Currently, this file depends on the sys/stat.h header to get the time of last
+        modification. Your compiler/OS does not provide this header then this will not
+        compile, sorry.
+
+  getFileSize
+  - Return the full size of the given file in bytes.
+
+  getFileTime
+  - Return the time of last change of the given file as a time_t.
+
+  readWholeFile
+  - Reads the entire file and stores it in a malloce'd buffer. You
+    need to call free on the return value.
+
+  trackFileChanges
+  - Register a given file to be tracked for changes.
+
+  pollFileChanges
+  - For all tracked files, check if they were modified and call
+    a user passed function if they were.
+
+  stopTrackingFiles
+  - Stop tracking any files and free up used memory.
+
+  -------------------
+  ----- Options -----
+  -------------------
+
+  #define any of these before including this file for them to take effect:
+
+  #define B_FILE_PREFIX(name) [your-name-prefix] ## name
+  #define B_PREFIX(name) [your-name-prefix] ## name
+  - Add a prefix to all functions/variables/types declared by this file.
+    Useful for avoiding name-conflicts. By default no prefix is added.
+  
+  #define B_FILE_REALLOC(mem, size) [your-realloc(mem, size)]
+  - Avoid using stdlib.h for realloc by definining your own realloc function
+    that this library will use to manage memory.
+*/
+
 #ifndef B_FILE_DEFINITION
 #define B_FILE_DEFINITION
 
+#ifndef B_FILE_PREFIX
+#   ifdef B_PREFIX
+#       define B_FILE_PREFIX(name) B_PREFIX(name)
+#   else
+#       define B_FILE_PREFIX(name) name
+#   endif
+#endif
+
 #include <time.h>
 
-size_t getFileSize(const char *filename);
+/* return '0' from callback to keep tracking file, or non-zero to stop tracking */
+typedef int(*B_FILE_PREFIX(FileChangeCallback))(const char *filename, void *userData);
 
-time_t getFileTime(const char *filename);
-
-char *readWholeFile(const char *filename, size_t *outLength);
-
-void trackFileChanges(const char *filename, void *userData, int(*callback)(const char *filename, void *userData));
-
-void checkTrackedFiles(void);
-
-void stopTrackingFiles(void);
+size_t  B_FILE_PREFIX(getFileSize)(const char *filename);
+time_t  B_FILE_PREFIX(getFileTime)(const char *filename);
+char *  B_FILE_PREFIX(readWholeFile)(const char *filename, size_t *outLength);
+void    B_FILE_PREFIX(trackFileChanges)(const char *filename, void *userData, B_FILE_PREFIX(FileChangeCallback) callback);
+void    B_FILE_PREFIX(pollFileChanges)(void);
+void    B_FILE_PREFIX(stopTrackingFiles)(void);
 
 #endif /* !B_FILE_DEFINITION */
+
+/*
+ * |                |
+ * v Implementation v
+ * |                |
+ */
 
 #ifdef B_FILE_IMPLEMENTATION
 #ifndef B_FILE_IMPLEMENTED
 #define B_FILE_IMPLEMENTED
 
+#ifndef B_FILE_REALLOC
+#include <stdlib.h>
+#define B_FILE_REALLOC(mem, size) realloc(mem, size)
+#endif
+
+/* !!! platform dependant !!! */
 #include <sys/stat.h>
+/* !!! platform dependant !!! */
+
 #include <string.h>
 
 typedef struct b__FileTrackData {
 	time_t lastChange;
 	void *userData;
-	int(*callback)(const char *filename, void *userData);
+	B_FILE_PREFIX(FileChangeCallback) callback;
 	char *filenamePtr;
 	char filenameBuffer[64];
 } b__FileTrackData;
@@ -37,7 +116,7 @@ static size_t b__trackedFilesCapacity;
 static size_t b__numTrackedFiles;
 static b__FileTrackData *b__trackedFiles;
 
-size_t getFileSize(const char *filename) {
+size_t B_FILE_PREFIX(getFileSize)(const char *filename) {
 	FILE *f = fopen(filename, "rb");
 	if (!f)
 		return 0;
@@ -48,7 +127,7 @@ size_t getFileSize(const char *filename) {
 	return (size_t)fsize;
 }
 
-time_t getFileTime(const char *filename) {
+time_t B_FILE_PREFIX(getFileTime)(const char *filename) {
 	struct stat s;
 	int ret = stat(filename, &s);
 	if (ret != 0)
@@ -56,7 +135,7 @@ time_t getFileTime(const char *filename) {
 	return s.st_mtime;
 }
 
-char *readWholeFile(const char *filename, size_t *outLength) {
+char *B_FILE_PREFIX(readWholeFile)(const char *filename, size_t *outLength) {
 	FILE *f = fopen(filename, "rb");
 	fseek(f, 0, SEEK_END);
 	long fsize = ftell(f);
@@ -65,7 +144,7 @@ char *readWholeFile(const char *filename, size_t *outLength) {
 	if (outLength)
 		*outLength = (size_t)fsize;
 
-	char *string = (char *)malloc((size_t)fsize + 1);
+	char *string = (char *)B_FILE_REALLOC(NULL, (size_t)fsize + 1);
 	fread(string, 1, (size_t)fsize, f);
 	fclose(f);
 
@@ -73,7 +152,7 @@ char *readWholeFile(const char *filename, size_t *outLength) {
 	return string;
 }
 
-void trackFileChanges(const char *filename, void *userData, int(*callback)(const char *filename, void *userData)) {
+void B_FILE_PREFIX(trackFileChanges)(const char *filename, void *userData, B_FILE_PREFIX(FileChangeCallback) callback) {
 	FILE *f = fopen(filename, "rb");
 	if (!f)
 		return;
@@ -82,14 +161,14 @@ void trackFileChanges(const char *filename, void *userData, int(*callback)(const
 	size_t filenameSize = 1 + strlen(filename);
 
 	b__FileTrackData data;
-	data.lastChange = getFileTime(filename);
+	data.lastChange = B_FILE_PREFIX(getFileTime)(filename);
 	data.callback = callback;
 	data.userData = userData;
 	if (filenameSize <= sizeof(data.filenameBuffer)) {
 		data.filenamePtr = NULL;
 		memcpy(data.filenameBuffer, filename, filenameSize);
 	} else {
-		data.filenamePtr = (char *)malloc(filenameSize);
+		data.filenamePtr = (char *)B_FILE_REALLOC(NULL, filenameSize);
 		memcpy(data.filenamePtr, filename, filenameSize);
 	}
 
@@ -97,25 +176,25 @@ void trackFileChanges(const char *filename, void *userData, int(*callback)(const
 		if (b__trackedFilesCapacity == 0)
 			b__trackedFilesCapacity = 2;
 		b__trackedFilesCapacity *= 2;
-		b__trackedFiles = (b__FileTrackData *)realloc(b__trackedFiles, b__trackedFilesCapacity * sizeof(b__FileTrackData));
+		b__trackedFiles = (b__FileTrackData *)B_FILE_REALLOC(b__trackedFiles, b__trackedFilesCapacity * sizeof(b__FileTrackData));
 	}
 
 	b__trackedFiles[b__numTrackedFiles] = data;
 	++b__numTrackedFiles;
 }
 
-void checkTrackedFiles(void) {
+void B_FILE_PREFIX(pollFileChanges)(void) {
 	for (size_t i = 0; i < b__numTrackedFiles; ++i) {
 		b__FileTrackData *data = &b__trackedFiles[i];
 		const char *filename = data->filenamePtr ? data->filenamePtr : &data->filenameBuffer[0];
-		time_t changeTime = getFileTime(filename);
+		time_t changeTime = B_FILE_PREFIX(getFileTime)(filename);
 		if (difftime(changeTime, data->lastChange) > 0) {
 			data->lastChange = changeTime;
-			int continueTracking = data->callback(filename, data->userData);
-			/* returning 0 means stop tracking */
-			if (!continueTracking) {
+			int stopTracking = data->callback(filename, data->userData);
+			/* returning non-zero means stop tracking */
+			if (stopTracking) {
 				if (data->filenamePtr)
-					free(data->filenamePtr);
+					B_FILE_REALLOC(data->filenamePtr, 0);
 				memmove(&b__trackedFiles[i], &b__trackedFiles[i + 1], (b__numTrackedFiles - i - 1) * sizeof(*data));
 				--b__numTrackedFiles;
 				--i; /* make sure to correct the loop */
@@ -124,11 +203,11 @@ void checkTrackedFiles(void) {
 	}
 }
 
-void stopTrackingFiles(void) {
+void B_FILE_PREFIX(stopTrackingFiles)(void) {
 	for (size_t i = 0; i < b__numTrackedFiles; ++i)
 		if (b__trackedFiles[i].filenamePtr)
-			free(b__trackedFiles[i].filenamePtr);
-	free(b__trackedFiles);
+			B_FILE_REALLOC(b__trackedFiles[i].filenamePtr, 0);
+	B_FILE_REALLOC(b__trackedFiles, 0);
 	b__trackedFiles = NULL;
 	b__trackedFilesCapacity = 0;
 	b__numTrackedFiles = 0;

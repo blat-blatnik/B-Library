@@ -87,12 +87,25 @@
 
   #define B_ALWAYS_ASSERT
   - Ignore B_DONT_ASSERT and NDEBUG and have ASSERT work in release builds as well.
+
+  #define B_DEBUG_PREFIX(name) [your-name-prefix] ## name
+  #define B_PREFIX(name) [your-name-prefix] ## name
+  - Add a prefix to all functions/variables/types declared by this file.
+    Useful for avoiding name-conflicts. By default no prefix is added.
 */
 
 #ifndef B_DEBUG_DEFINITION
 #define B_DEBUG_DEFINITION
 
-void debugLog(const char *message, ...);
+#ifndef B_DEBUG_PREFIX
+#   ifdef B_PREFIX
+#       define B_DEBUG_PREFIX(name) B_PREFIX(name)
+#   else
+#       define B_DEBUG_PREFIX(name) name
+#   endif
+#endif
+
+void B_DEBUG_PREFIX(debugLog)(const char *message, ...);
 
 #define B_STRINGIFY(identifier) #identifier
 #define B_STRINGIFY2(identifier) B_STRINGIFY(identifier)
@@ -110,7 +123,7 @@ void debugLog(const char *message, ...);
 #	define ASSERT(condition, ...)\
 		do {\
 			if (!!!(condition)) {\
-				debugLog(\
+				B_DEBUG_PREFIX(debugLog)(\
 					"ERROR assert failed \"" #condition "\"\n"\
 					" in file " __FILE__ "\n"\
 					" on line " B_STRINGIFY2(__LINE__) "\n"\
@@ -141,12 +154,12 @@ void debugLog(const char *message, ...);
 
 static FILE *b__logFile;
 
-void debugLog(const char *message, ...) {
+void B_DEBUG_PREFIX(debugLog)(const char *message, ...) {
 
 	if (strcmp(message, "CLOSE") == 0) {
 
 		if (b__logFile) {
-			debugLog("log closed");
+            B_DEBUG_PREFIX(debugLog)("log closed");
 			fclose(b__logFile);
 			b__logFile = NULL;
 		}
@@ -160,13 +173,13 @@ void debugLog(const char *message, ...) {
 		va_end(args);
 	
 		if (b__logFile) {
-			debugLog("log closed");
+            B_DEBUG_PREFIX(debugLog)("log closed");
 			fclose(b__logFile);
 		}
 		
 		b__logFile = fopen(filename, "at");
 		if (b__logFile)
-			debugLog("log opened");
+            B_DEBUG_PREFIX(debugLog)("log opened");
 	
 		return;
 	}
@@ -179,7 +192,7 @@ void debugLog(const char *message, ...) {
 			   debugLog so we would enter an infinite loop.. */
 			return;
 		}
-		debugLog("log opened");
+        B_DEBUG_PREFIX(debugLog)("log opened");
 	}
 
 	char timestamp[64];

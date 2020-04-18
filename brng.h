@@ -27,35 +27,69 @@
   seed:   2^63 possible different initial states 
   output: 32 bits
   secure: NO! - do NOT use this for security critical applications!
-  speed:  ~4 cycles per generated 32-bit number
+  speed:  ~3.8 CPU cycles per generated 32-bit number (64-bit machine)
+
+  -------------------
+  ----- Options -----
+  -------------------
+
+  #define any of these before including this file for them to take effect:
+
+  #define B_RNG_PREFIX(name) [your-name-prefix] ## name
+  #define B_PREFIX(name) [your-name-prefix] ## name
+  - Add a prefix to all functions/variables/types declared by this file.
+    Useful for avoiding name-conflicts. By default no prefix is added.
+
+  #define B_RNG_USE_PCG_XSH_RR
+  - Use the slower PCG-XSH-RR variant instead of the default PCG-XSH-RS.
+
+  #define B_RNG_U64 [your-64-bit-unsigned-int-type]
+  - Use a custom 64 bit unsigned int instead of the default unsigned long long.
+
+  #define B_RNG_SQRTF(x) [your-sqrtf(x)]
+  #define B_RNG_LOGF(x) [your-logf(x)]
+  - Avoid using math.h for sqrtf and logf by defining BOTH of these. You
+    have to either define BOTH of them or NONE of them.
 */
 
 #ifndef B_RNG_DEFINITION
 #define B_RNG_DEFINITION
 
+#ifndef B_RNG_PREFIX
+#   ifdef B_PREFIX
+#       define B_RNG_PREFIX(name) B_PREFIX(name)
+#   else
+#       define B_RNG_PREFIX(name) name
+#   endif
+#endif
+
+#ifndef B_RNG_U64
+#   define B_RNG_U64 unsigned long long
+#endif
+
 /* PCG generator state */
-typedef unsigned long long RNG;
+typedef B_RNG_U64 B_RNG_PREFIX(RNG);
 
 /* initializes a new random generator */
-RNG seedRNG(unsigned long long seed);
+B_RNG_PREFIX(RNG) B_RNG_PREFIX(seedRNG)(B_RNG_U64 seed);
 
 /* generate unsigned integer in uniform[0, UINT_MAX] */
-unsigned int randu(RNG *rng);
+unsigned int B_RNG_PREFIX(randu)(B_RNG_PREFIX(RNG) *rng);
 
 /* generate integer in uniform[min, max) */
-int randi(RNG *rng, int min, int max);
+int B_RNG_PREFIX(randi)(B_RNG_PREFIX(RNG) *rng, int min, int max);
 
 /* generate a '1' with the given probability p, and '0' with probability 1 - p */
-int randp(RNG *rng, float p);
+int B_RNG_PREFIX(randp)(B_RNG_PREFIX(RNG) *rng, float p);
 
 /* generate float in uniform[0, 1] */
-float randf(RNG *rng);
+float B_RNG_PREFIX(randf)(B_RNG_PREFIX(RNG) *rng);
 
 /* generate float in uniform[min, max] */
-float randUniform(RNG *rng, float min, float max);
+float B_RNG_PREFIX(randUniform)(B_RNG_PREFIX(RNG) *rng, float min, float max);
 
 /* generate normally distributed float with given mean and standard deviation */
-float randGaussian(RNG *rng, float mean, float stddev);
+float B_RNG_PREFIX(randGaussian)(B_RNG_PREFIX(RNG) *rng, float mean, float stddev);
 
 #endif /* !B_RNG_DEFINITION */
 
@@ -69,50 +103,66 @@ float randGaussian(RNG *rng, float mean, float stddev);
 #ifndef B_RNG_IMPLEMENTED
 #define B_RNG_IMPLEMENTED
 
-#include <math.h>
+#ifndef B_RNG_SQRTF
+#   include <math.h>
+#   define B_RNG_SQRTF(x) sqrtf(x)
+#   define B_RNG_LOGF(x) logf(x)
+#endif
 
-RNG seedRNG(unsigned long long seed) {
-	RNG rng = 2 * seed + 1;
-	randu(&rng);
+B_RNG_PREFIX(RNG) B_RNG_PREFIX(seedRNG)(B_RNG_U64 seed) {
+#ifndef B_RNG_USE_PCG_XSH_RR
+    B_RNG_PREFIX(RNG) rng = 2 * seed + 1; /* seed must be odd */
+#else
+    B_RNG_PREFIX(RNG) rng = seed;
+#endif
+    B_RNG_PREFIX(randu)(&rng);
 	return rng;
 }
 
-unsigned int randu(RNG *rng) {
-	RNG x = *rng;
+unsigned int B_RNG_PREFIX(randu)(B_RNG_PREFIX(RNG) *rng) {
+    B_RNG_U64 x = *rng;
+#ifndef B_RNG_USE_PCG_XSH_RR
 	unsigned int count = (unsigned int)(x >> 61);
 	*rng = x * 6364136223846793005u;
 	x ^= x >> 22;
 	return (unsigned int)(x >> (22 + count));
+#else
+    unsigned int count = (unsigned int)(x >> 59);
+    *rng = x * 6364136223846793005u + 1442695040888963407u ;
+    x ^= x >> 18;
+    x >>= 27;
+    return x >> count | x << ((unsigned int)-(int)count & 31);
+#endif
 }
 
-int randi(RNG *rng, int min, int max) {
-	unsigned long long m = 
-		(unsigned long long)randu(rng) * (unsigned long long)(max - min);
+int B_RNG_PREFIX(randi)(B_RNG_PREFIX(RNG) *rng, int min, int max) {
+    B_RNG_U64 m =
+		(B_RNG_U64)B_RNG_PREFIX(randu)(rng) * (B_RNG_U64)(max - min);
 	return min + (int)(m >> 32);
 }
 
-int randp(RNG *rng, float p) {
-    return randf(rng) < p + 1.192092896e-7f;
+int B_RNG_PREFIX(randp)(B_RNG_PREFIX(RNG) *rng, float p) {
+    return B_RNG_PREFIX(randf)(rng) < p + 1.192092896e-7f;
 }
 
-float randf(RNG *rng) {
-	return randu(rng) / (float)0xFFFFFFFF;
+float B_RNG_PREFIX(randf)(B_RNG_PREFIX(RNG) *rng) {
+	return B_RNG_PREFIX(randu)(rng) / (float)0xFFFFFFFF;
 }
 
-float randUniform(RNG *rng, float min, float max) {
-	return min + randf(rng) * (max - min);
+float B_RNG_PREFIX(randUniform)(B_RNG_PREFIX(RNG) *rng, float min, float max) {
+	return min + B_RNG_PREFIX(randf)(rng) * (max - min);
 }
 
-float randGaussian(RNG *rng, float mean, float stddev) {
+float B_RNG_PREFIX(randGaussian)(B_RNG_PREFIX(RNG) *rng, float mean, float stddev) {
     /* Marsaglia polar method:
        https://en.wikipedia.org/wiki/Marsaglia_polar_method */
 	float u, v, s;
 	do {
-		u = randf(rng) * 2.0f - 1.0f;
-		v = randf(rng) * 2.0f - 1.0f;
+		u = B_RNG_PREFIX(randf)(rng) * 2.0f - 1.0f;
+		v = B_RNG_PREFIX(randf)(rng) * 2.0f - 1.0f;
 		s = u * u + v * v;
 	} while (s >= 1.0f || s == 0.0f);
-	s = sqrtf(-2.0f * logf(s) / s);
+	s = B_RNG_SQRTF(-2.0f * B_RNG_LOGF(s) / s);
 	return mean + stddev * u * s;
 }
 
