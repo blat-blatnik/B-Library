@@ -267,10 +267,14 @@ B_MEM_PREFIX(TempMemStats)     B_MEM_PREFIX(getTempMemStats)(void);
 #endif
 
 #ifndef B_THREAD_LOCAL
-#	if defined(_MSC_VER)
+#	if defined(_MSC_VER) || defined(__INTEL_COMPILER)
 #		define B_THREAD_LOCAL __declspec(thread)
+#	elif defined(__GNUC__) || defined(__clang__)
+#		define B_THREAD_LOCAL __thread
+#	elif defined(__cplusplus)
+#		define B_THREAD_LOCAL thread_local /* c++ fallback */
 #	else
-#		define B_THREAD_LOCAL _Thread_local
+#		define B_THREAD_LOCAL _Thread_local /* c fallback */
 #	endif
 #endif
 
@@ -388,6 +392,9 @@ void *B_MEM_PREFIX(debugRealloc)(void *mem, size_t size, const char *file, const
 }
 
 void B_MEM_PREFIX(debugFree)(void *mem, const char *file, const char *func, int line) {
+	(void)file;
+	(void)func;
+	(void)line;
 	if (!mem)
 		return;
 

@@ -1,5 +1,5 @@
 /*
-  bmath.hpp - v0.1 - public domain math library
+  bmath.hpp - v0.2 - public domain math library
 
   by Blat Blatnik
 
@@ -13,8 +13,6 @@
   library does not go out of its way to provide GLSL equivalent 
   functionality - only the commonly used stuff is provided, things like 
   sin(vec4) are not. Just like GLM, this is a header-only library.
-
-  REQUIRES C++11 for exp2/log2 and constexpr.
 
   This library provides:
   + 2D, 3D and 4D vectors, 2x2, 3x3, 4x4 matrices, generic to any type
@@ -49,40 +47,94 @@
   For view/projection matrix building functions, both a left-handed and a right-handed
   version are provided (*LH and *RH) so you can use whichever one suits your needs.
 
-  By default, the projection matrix building functions assume that depth values
-  outside of **[-1, 1]** are clipped - like they are in OpenGL. If you use DirectX or
-  Vulkan, then you can 
-  #define B_DEPTH_CLIP_ZERO_TO_ONE 
-  before including this file to make the library produce projection matrices suitable 
-  for clipping depth values outside of [0, 1].
+  This library uses C++11 features (constexpr, log2, exp2) when we detect a compiler that
+  supports them. Currently only MSVC, GCC, and clang are checked - any other compiler
+  is assumed to be compliant with C++11.
 
-  Also by default all types and functions are defined in the global namespace. You can
-  #define B_MATH_NAMESPACE [some-namespace]   
-  before including this file to place everything in a namespace of your choice.
+  -------------------
+  ----- Options -----
+  -------------------
+
+  #define any of these before including this file for them to take effect:
+
+  #define B_MATH_NAMESPACE [some-namespace]
+  - Place all type definitions and functions in a namespace of your choosing. By
+    default everything is defined in the global namespace
+
+  #define B_DEPTH_CLIP_ZERO_TO_ONE
+  - By default the projection matrix functions assume depth values are clipped when
+    they are outside [-1, 1] which is the default in OpenGL. Using this option the
+	projection matrices will clip depth values outside of [0, 1] which is the default
+	in Vulkan and Direct3D
+
+  #define B_MATH_NO_CPP11
+  - Don't use C++ 11 features: constexpr and log2, exp2 from <cmath>
 */
 
 #pragma once
 #ifndef B_MATH
 #define B_MATH
 
-#ifdef B_MATH_NAMESPACE
-#define B_MATH_BEGIN namespace B_MATH_NAMESPACE {
-#define B_MATH_END }
-#else
-#define B_MATH_BEGIN 
-#define B_MATH_END
-#endif
-
 #include <cmath>
+
+#ifdef B_MATH_NAMESPACE
+#	define B_MATH_BEGIN namespace B_MATH_NAMESPACE {
+#	define B_MATH_END }
+#else
+#	define B_MATH_BEGIN 
+#	define B_MATH_END
+#endif
 
 #if !defined(B_DEPTH_CLIP_ZERO_TO_ONE) && !defined(B_DEPTH_CLIP_MINUS_ONE_TO_ONE)
 #	define B_DEPTH_CLIP_MINUS_ONE_TO_ONE
 #endif
 
+#ifndef B_MATH_NO_CPP11
+#	if defined(_MSC_VER)
+#		if _MSC_VER >= 1900
+#			define B_MATH_HAS_CONSTEXPR
+#		endif
+#		if _MSC_VER >= 1800
+#			define B_MATH_HAS_DEFAULT_CONSTRUCTOR
+#		endif
+#		if _MSC_VER >= 1600
+#			define B_MATH_HAS_EXP2_LOG2
+#		endif
+#	elif defined(__GNUC__) || defined(__MINGW32__)
+#		if (__GNUC__ == 4 && __GNUC_MINOR__ >= 6) || __GNUC__ > 4
+#			define B_MATH_HAS_CONSTEXPR
+#		endif
+#		if (__GNUC__ == 4 && __GNUC_MINOR__ >= 6) || __GNUC__ > 4
+#			define B_MATH_HAS_DEFAULT_CONSTRUCTOR
+#		endif
+#		define B_MATH_HAS_EXP2_LOG2
+#	elif defined(__clang__)
+#		if (__clang_major__ == 3 && __clang_minor__ >= 1) || __clang_major__ > 3
+#			define B_MATH_HAS_CONSTEXPR
+#		endif
+#		if (__clang_major__ == 3 && __clang_minor__ >= 0) || __clang_major__ > 3
+#			define B_MATH_HAS_DEFAULT_CONSTRUCTOR
+#		endif
+#		define B_MATH_HAS_EXP2_LOG2
+#	else
+#		define B_MATH_HAS_CONSTEXPR
+#		define B_MATH_HAS_DEFAULT_CONSTRUCTOR
+#		define B_MATH_HAS_EXP2_LOG2
+#	endif
+#endif /* !B_MATH_NO_CPP11 */
+
+#ifdef B_MATH_HAS_CONSTEXPR
+#	define B_CONSTEXPR constexpr
+#else
+#	define B_CONSTEXPR
+#endif
+
 B_MATH_BEGIN
 
-constexpr float  pi   = 3.141592741f;
-constexpr double pi64 = 3.141592653589793;
+#ifdef B_MATH_HAS_CONSTEXPR
+B_CONSTEXPR float  pi   = 3.141592741f;
+B_CONSTEXPR double pi64 = 3.141592653589793;
+#endif
 
 /*
  * --- Struct Declarations ---
@@ -121,6 +173,19 @@ typedef quaternion<double> dquat;
  * --- Struct Definitions ---
  */
 
+/* disable warning: nonstandard extension used nameless struct/union */
+#if defined(_MSC_VER)
+#	pragma warning(push)
+#	pragma warning(disable: 4201)
+#elif defined(__GNUC__) || defined(__MINGW32__)
+#	pragma GCC diagnostic push
+#	pragma GCC diagnostic ignored "-Wpedantic"
+#elif defined(__clang__)
+#	pragma clang diagnostic push
+#	pragma clang diagnostic ignored "-Wgnu-anonymous-struct"
+#	pragma clang diagnostic ignored "-Wnested-anon-types"
+#endif
+
 template<class T> 
 struct vector<T, 2> {
 
@@ -131,33 +196,39 @@ struct vector<T, 2> {
 		T elem[2];
 	};
 
-	vector() = default;
-	constexpr vector(const vector &v) = default;
+#ifdef B_MATH_HAS_DEFAULT_CONSTRUCTOR
+	inline vector() = default;
+	inline B_CONSTEXPR vector(const vector &v) = default;
+#else
+	inline vector() {}
+	inline B_CONSTEXPR vector(const vector &v)
+		: x(v.x), y(v.y) {};
+#endif
 
 	template<class T1, class T2> 
-	inline constexpr vector(T1 x, T2 y)
+	inline B_CONSTEXPR vector(T1 x, T2 y)
 		: x(T(x)), y(T(y)) {}
 
 	template<class T1> 
-	inline constexpr explicit vector(T1 xy)
-		: vector(xy, xy) {}
+	inline B_CONSTEXPR explicit vector(T1 xy)
+		: x(T(xy)), y(T(xy)) {}
 	
 	template<class T1> 
-	inline constexpr explicit vector(vector<T1, 2> xy)
-		: vector(xy.x, xy.y) {}
+	inline B_CONSTEXPR explicit vector(vector<T1, 2> xy)
+		: x(T(xy.x)), y(T(xy.y)) {}
 	
 	template<class T1> 
-	inline constexpr explicit vector(vector<T1, 3> xy)
-		: vector(xy.x, xy.y) {}
+	inline B_CONSTEXPR explicit vector(vector<T1, 3> xy)
+		: x(T(xy.x)), y(T(xy.y)) {}
 
 	template<class T1> 
-	inline constexpr explicit vector(vector<T1, 4> xy)
-		: vector(xy.x, xy.y) {}
+	inline B_CONSTEXPR explicit vector(vector<T1, 4> xy)
+		: x(T(xy.x)), y(T(xy.y)) {}
 
 	inline T &operator[](int index) {
 		return elem[index];
 	}
-	inline constexpr const T &operator[](int index) const {
+	inline B_CONSTEXPR const T &operator[](int index) const {
 		return elem[index];
 	}
 };
@@ -173,41 +244,47 @@ struct vector<T, 3> {
 		T elem[3];
 	};
 
-	vector() = default;
-	constexpr vector(const vector &v) = default;
+#ifdef B_MATH_HAS_DEFAULT_CONSTRUCTOR
+	inline vector() = default;
+	inline B_CONSTEXPR vector(const vector & v) = default;
+#else
+	inline vector() {}
+	inline B_CONSTEXPR vector(const vector &v)
+		: x(v.x), y(v.y), z(v.z) {};
+#endif
 
 	template<class T1, class T2, class T3> 
-	inline constexpr vector(T1 x, T2 y, T3 z)
+	inline B_CONSTEXPR vector(T1 x, T2 y, T3 z)
 		: x(T(x)), y(T(y)), z(T(z)) {}
 	
 	template<class T1, class T2> 
-	inline constexpr vector(vector<T1, 2> xy, T2 z)
-		: vector(xy.x, xy.y, z) {}
+	inline B_CONSTEXPR vector(vector<T1, 2> xy, T2 z)
+		: x(T(xy.x)), y(T(xy.y)), z(T(z)) {}
 	
 	template<class T1, class T2> 
-	inline constexpr vector(T1 x, vector<T2, 2> yz)
-		: vector(x, yz.x, yz.y) {}
+	inline B_CONSTEXPR vector(T1 x, vector<T2, 2> yz)
+		: x(T(x)), y(T(yz.x)), z(T(yz.y)) {}
 	
 	template<class T1> 
-	inline constexpr explicit vector(T1 xyz)
-		: vector(xyz, xyz, xyz) {}
+	inline B_CONSTEXPR explicit vector(T1 xyz)
+		: x(T(xyz)), y(T(xyz)), z(T(xyz)) {}
 	
 	template<class T1> 
-	inline constexpr explicit vector(vector<T1, 2> xy)
-		: vector(xy.x, T(0)) {}
+	inline B_CONSTEXPR explicit vector(vector<T1, 2> xy)
+		: x(T(xy.x)), y(T(xy.y)), z(T(0)) {}
 	
 	template<class T1> 
-	inline constexpr explicit vector(vector<T1, 3> xyz)
-		: vector(xyz.x, xyz.y, xyz.z) {}
+	inline B_CONSTEXPR explicit vector(vector<T1, 3> xyz)
+		: x(T(xyz.x)), y(T(xyz.y)), z(T(xyz.z)) {}
 	
 	template<class T1> 
-	inline constexpr explicit vector(vector<T1, 4> xyz)
-		: vector(xyz.x, xyz.y, xyz.z) {}
+	inline B_CONSTEXPR explicit vector(vector<T1, 4> xyz)
+		: x(T(xyz.x)), y(T(xyz.y)), z(T(xyz.z)) {}
 
 	inline T &operator[](int index) {
 		return elem[index];
 	}
-	inline constexpr const T &operator[](int index) const {
+	inline B_CONSTEXPR const T &operator[](int index) const {
 		return elem[index];
 	}
 };
@@ -231,57 +308,63 @@ struct vector<T, 4> {
 		T elem[4];
 	};
 
-	vector() = default;
-	constexpr vector(const vector &v) = default;
+#ifdef B_MATH_HAS_DEFAULT_CONSTRUCTOR
+	inline vector() = default;
+	inline B_CONSTEXPR vector(const vector & v) = default;
+#else
+	inline vector() {}
+	inline B_CONSTEXPR vector(const vector &v)
+		: x(v.x), y(v.y), z(v.z), w(v.w) {};
+#endif
 
 	template<class T1, class T2, class T3, class T4> 
-	inline constexpr vector(T1 x, T2 y, T3 z, T4 w)
+	inline B_CONSTEXPR vector(T1 x, T2 y, T3 z, T4 w)
 		: x(T(x)), y(T(y)), z(T(z)), w(T(w)) {}
 	
 	template<class T1, class T2, class T3> 
-	inline constexpr vector(vector<T1, 2> xy, T2 z, T3 w)
-		: vector(xy.x, z, w) {}
+	inline B_CONSTEXPR vector(vector<T1, 2> xy, T2 z, T3 w) 
+		: x(T(xy.x)), y(T(xy.y)), z(T(z)), w(T(w)) {}
 	
 	template<class T1, class T2, class T3> 
-	inline constexpr vector(T1 x, vector<T2, 2> yz, T3 w)
-		: vector(x, yz.x, yz.y, w) {}
+	inline B_CONSTEXPR vector(T1 x, vector<T2, 2> yz, T3 w)
+		: x(T(x)), y(T(yz.x)), z(T(yz.y)), w(T(w)) {}
 	
 	template<class T1, class T2, class T3> 
-	inline constexpr vector(T1 x, T2 y, vector<T3, 2> zw)
-		: vector(x, y, zw.x, zw.y) {}
+	inline B_CONSTEXPR vector(T1 x, T2 y, vector<T3, 2> zw)
+		: x(T(x)), y(T(y)), z(T(zw.x)), w(T(zw.y)) {}
 	
 	template<class T1, class T2> 
-	inline constexpr vector(vector<T1, 2> xy, vector<T2, 2> zw)
-		: vector(xy.x, xy.y, zw.x, zw.y) {}
+	inline B_CONSTEXPR vector(vector<T1, 2> xy, vector<T2, 2> zw)
+		: x(T(xy.x)), y(T(xy.y)), z(T(zw.x)), w(T(zw.y)) {}
 	
 	template<class T1, class T2> 
-	inline constexpr vector(vector<T1, 3> xyz, T2 w)
-		: vector(xyz.x, xyz.y, xyz.z, w) {}
+	inline B_CONSTEXPR vector(vector<T1, 3> xyz, T2 w)
+		: x(T(xyz.x)), y(T(xyz.y)), z(T(xyz.z)), w(T(w)) {}
 	
 	template<class T1, class T2> 
-	inline constexpr vector(T1 x, vector<T2, 3> yzw)
-		: vector(x, yzw.x, yzw.y, yzw.z) {}
+	inline B_CONSTEXPR vector(T1 x, vector<T2, 3> yzw)
+		: x(T(x)), y(T(yzw.x)), z(T(yzw.y)), w(T(yzw.z)) {}
 	
 	template<class T1> 
-	inline constexpr explicit vector(T1 xyzw)
-		: vector(xyzw, xyzw, xyzw, xyzw) {}
+	inline B_CONSTEXPR explicit vector(T1 xyzw)
+		: x(T(xyzw)), y(T(xyzw)), z(T(xyzw)), w(T(xyzw)) {}
 	
 	template<class T1> 
-	inline constexpr explicit vector(vector<T1, 2> xy)
-		: vector(xy.x, xy.y, T(0), T(0)) {}
+	inline B_CONSTEXPR explicit vector(vector<T1, 2> xy)
+		: x(T(xy.x)), y(T(xy.y)), z(T(0)), w(T(0)) {}
 	
 	template<class T1> 
-	inline constexpr explicit vector(vector<T1, 3> xyz)
-		: vector(xyz.x, xyz.y, xyz.z, T(0)) {}
+	inline B_CONSTEXPR explicit vector(vector<T1, 3> xyz)
+		: x(T(xyz.x)), y(T(xyz.y)), z(T(xyz.z)), w(T(0)) {}
 	
 	template<class T1> 
-	inline constexpr explicit vector(vector<T1, 4> xyzw)
-		: vector(xyzw.x, xyzw.y, xyzw.z, xyzw.w) {}
+	inline B_CONSTEXPR explicit vector(vector<T1, 4> xyzw)
+		: x(T(xyzw.x)), y(T(xyzw.y)), z(T(xyzw.z)), w(T(xyzw.w)) {}
 
 	inline T &operator[](int index) {
 		return elem[index];
 	}
-	inline constexpr const T &operator[](int index) const {
+	inline B_CONSTEXPR const T &operator[](int index) const {
 		return elem[index];
 	}
 };
@@ -291,13 +374,19 @@ struct matrix<T, 2, 2> {
 
 	vector<T, 2> col[2];
 
-	matrix() = default;
-	constexpr matrix(const matrix &m) = default;
+#ifdef B_MATH_HAS_DEFAULT_CONSTRUCTOR
+	inline matrix() = default;
+	inline B_CONSTEXPR matrix(const matrix &m) = default;
+#else
+	inline matrix() {}
+	inline B_CONSTEXPR matrix(const matrix &m)
+		: col{ m.col[0], m.col[1] } {};
+#endif
 
 	template<
 		class X1, class Y1,
 		class X2, class Y2>
-	inline constexpr matrix(
+	inline B_CONSTEXPR matrix(
 		X1 x1, Y1 y1,
 		X2 x2, Y2 y2)
 		: col{
@@ -307,39 +396,45 @@ struct matrix<T, 2, 2> {
 	template<
 		class T1,
 		class T2>
-	inline constexpr matrix(
+	inline B_CONSTEXPR matrix(
 		vector<T1, 2> col1,
 		vector<T2, 2> col2)
 		: col{ col1, col2 } {}
 
 	template<class T1> 
-	inline constexpr explicit matrix(matrix<T1, 2, 2> m)
-		: matrix(m.col[0], m.col[1]) {}
+	inline B_CONSTEXPR explicit matrix(matrix<T1, 2, 2> m)
+		: col{ 
+			vector<T, 2>(m.col[0]), 
+			vector<T, 2>(m.col[1]) } {}
 
 	template<class T1> 
-	inline constexpr explicit matrix(matrix<T1, 3, 3> m)
-		: matrix(m.col[0].xy, m.col[1].xy) {}
+	inline B_CONSTEXPR explicit matrix(matrix<T1, 3, 3> m)
+		: col{ 
+			vector<T, 2>(m.col[0].xy), 
+			vector<T, 2>(m.col[1].xy) } {}
 
 	template<class T1> 
-	inline constexpr explicit matrix(matrix<T1, 4, 4> m)
-		: matrix(m.col[0].xy, m.col[1].xy) {}
+	inline B_CONSTEXPR explicit matrix(matrix<T1, 4, 4> m)
+		: col{ 
+			vector<T, 2>(m.col[0].xy), 
+			vector<T, 2>(m.col[1].xy) } {}
 
 	template<class T1> 
-	inline constexpr explicit matrix(vector<T1, 2> diag)
-		: matrix(
-			diag.x, T( 0 ), 
-			T( 0 ), diag.y) {}
+	inline B_CONSTEXPR explicit matrix(vector<T1, 2> diag)
+		: col{
+			vector<T, 2>(diag.x,      0), 
+			vector<T, 2>(     0, diag.y) } {}
 	
 	template<class T1> 
-	inline constexpr explicit matrix(T1 diag)
-		: matrix(
-			diag, T(0),
-			T(0), diag) {}
+	inline B_CONSTEXPR explicit matrix(T1 diag)
+		: col{
+			vector<T, 2>(diag,    0),
+			vector<T, 2>(   0, diag) } {}
 
 	inline vector<T, 2> &operator[](int index) {
 		return col[index];
 	}
-	inline constexpr const vector<T, 2> &operator[](int index) const {
+	inline B_CONSTEXPR const vector<T, 2> &operator[](int index) const {
 		return col[index];
 	}
 };
@@ -349,14 +444,20 @@ struct matrix<T, 3, 3> {
 
 	vector<T, 3> col[3];
 
-	matrix() = default;
-	constexpr matrix(const matrix &m) = default;
+#ifdef B_MATH_HAS_DEFAULT_CONSTRUCTOR
+	inline matrix() = default;
+	inline B_CONSTEXPR matrix(const matrix & m) = default;
+#else
+	inline matrix() {}
+	inline B_CONSTEXPR matrix(const matrix &m)
+		: col{ m.col[0], m.col[1], m.col[2] } {};
+#endif
 
 	template<
 		class X1, class Y1, class Z1,
 		class X2, class Y2, class Z2,
 		class X3, class Y3, class Z3>
-	inline constexpr matrix(
+	inline B_CONSTEXPR matrix(
 		X1 x1, Y1 y1, Z1 z1,
 		X2 x2, Y2 y2, Z2 z2,
 		X3 x3, Y3 y3, Z3 z3)
@@ -369,49 +470,55 @@ struct matrix<T, 3, 3> {
 		class T1,
 		class T2,
 		class T3>
-	inline constexpr matrix(
+	inline B_CONSTEXPR matrix(
 		vector<T1, 3> col1,
 		vector<T2, 3> col2,
 		vector<T3, 3> col3)
 		: col{ 
 			vector<T, 3>(col1), 
-			vector<T, 3>(col2),
+			vector<T, 3>(col2), 
 			vector<T, 3>(col3) } {}
 
 	template<class T1> 
-	inline constexpr explicit matrix(matrix<T1, 2, 2> m)
-		: matrix(
-			vector<T, 3>(m.col[0], T(0)),
-			vector<T, 3>(m.col[1], T(0)),
-			vector<T, 3>(T(0),T(0),T(1))) {}
+	inline B_CONSTEXPR explicit matrix(matrix<T1, 2, 2> m)
+		: col{
+			vector<T, 3>(m.col[0], 0),
+			vector<T, 3>(m.col[1], 0),
+			vector<T, 3>(0,   0,   1) } {}
 	
 	template<class T1> 
-	inline constexpr explicit matrix(matrix<T1, 3, 3> m)
-		: matrix(m.col[0], m.col[1], m.col[2]) {}
+	inline B_CONSTEXPR explicit matrix(matrix<T1, 3, 3> m)
+		: col{ 
+			vector<T, 3>(m.col[0]), 
+			vector<T, 3>(m.col[1]), 
+			vector<T, 3>(m.col[2]) } {}
 
 	
 	template<class T1> 
-	inline constexpr explicit matrix(matrix<T1, 4, 4> m)
-		: matrix(m.col[0].xyz, m.col[1].xyz, m.col[2].xyz) {}
+	inline B_CONSTEXPR explicit matrix(matrix<T1, 4, 4> m)
+		: col{ 
+			vector<T, 3>(m.col[0].xyz), 
+			vector<T, 3>(m.col[1].xyz), 
+			vector<T, 3>(m.col[2].xyz) } {}
 	
 	template<class T1> 
-	inline constexpr explicit matrix(vector<T1, 3> diag)
-		: matrix(
-			diag.x, T( 0 ), T( 0 ),
-			T( 0 ), diag.y, T( 0 ),
-			T( 0 ), T( 0 ), diag.z) {}
+	inline B_CONSTEXPR explicit matrix(vector<T1, 3> diag)
+		: col{
+			vector<T, 3>(diag.x,      0,      0),
+			vector<T, 3>(     0, diag.y,      0),
+			vector<T, 3>(     0,      0, diag.z) } {}
 	
 	template<class T1> 
-	inline constexpr explicit matrix(T1 diag)
-		: matrix(
-			diag, T(0), T(0),
-			T(0), diag, T(0),
-			T(0), T(0), diag) {}
+	inline B_CONSTEXPR explicit matrix(T1 diag)
+		: col{
+			vector<T, 3>(diag,    0,    0),
+			vector<T, 3>(   0, diag,    0),
+			vector<T, 3>(   0,    0, diag) } {}
 
 	inline vector<T, 3> &operator[](int index) {
 		return col[index];
 	}
-	inline constexpr const vector<T, 3> &operator[](int index) const {
+	inline B_CONSTEXPR const vector<T, 3> &operator[](int index) const {
 		return col[index];
 	}
 };
@@ -421,15 +528,21 @@ struct matrix<T, 4, 4> {
 
 	vector<T, 4> col[4];
 
-	matrix() = default;
-	constexpr matrix(const matrix &m) = default;
-	
+#ifdef B_MATH_HAS_DEFAULT_CONSTRUCTOR
+	inline matrix() = default;
+	inline B_CONSTEXPR matrix(const matrix & m) = default;
+#else
+	inline matrix() {}
+	inline B_CONSTEXPR matrix(const matrix &m)
+		: col{ m.col[0], m.col[1], m.col[2], m.col[3] } {};
+#endif
+
 	template<
 		class X1, class Y1, class Z1, class W1,
 		class X2, class Y2, class Z2, class W2,
 		class X3, class Y3, class Z3, class W3, 
 		class X4, class Y4, class Z4, class W4>
-	inline constexpr matrix(
+	inline B_CONSTEXPR matrix(
 		X1 x1, Y1 y1, Z1 z1, W1 w1,
 		X2 x2, Y2 y2, Z2 z2, W2 w2,
 		X3 x3, Y3 y3, Z3 z3, W3 w3,
@@ -445,61 +558,61 @@ struct matrix<T, 4, 4> {
 		class T2,
 		class T3,
 		class T4>
-	inline constexpr matrix(
+	inline B_CONSTEXPR matrix(
 		vector<T1, 4> col1,
 		vector<T2, 4> col2,
 		vector<T3, 4> col3,
 		vector<T4, 4> col4)
 		: col{ 
-			vector<T, 4>(col1),
-			vector<T, 4>(col2),
-			vector<T, 4>(col3),
+			vector<T, 4>(col1), 
+			vector<T, 4>(col2), 
+			vector<T, 4>(col3), 
 			vector<T, 4>(col4) } {}
 
 	template<class T1> 
-	inline constexpr explicit matrix(matrix<T1, 2, 2> m)
-		: matrix(
-			vector<T, 4>(m.col[0], T(0),T(0)),
-			vector<T, 4>(m.col[1], T(0),T(0)),
-			vector<T, 4>(T(0),T(0),T(1),T(0)),
-			vector<T, 4>(T(0),T(0),T(0),T(1))) {}
+	inline B_CONSTEXPR explicit matrix(matrix<T1, 2, 2> m)
+		: col{
+			vector<T, 4>(m.col[0], 0, 0),
+			vector<T, 4>(m.col[1], 0, 0),
+			vector<T, 4>(0,   0,   1, 1),
+			vector<T, 4>(0,   0,   0, 1) } {}
 
 	template<class T1> 
-	inline constexpr explicit matrix(matrix<T1, 3, 3> m)
-		: matrix(
-			vector<T, 4>(m.col[0], T(0)),
-			vector<T, 4>(m.col[1], T(0)),
-			vector<T, 4>(m.col[2], T(0)),
-			vector<T, 4>(T(0), T(0), T(0), T(1))) {}
+	inline B_CONSTEXPR explicit matrix(matrix<T1, 3, 3> m)
+		: col{
+			vector<T, 4>(m.col[0], 0),
+			vector<T, 4>(m.col[1], 0),
+			vector<T, 4>(m.col[2], 0),
+			vector<T, 4>(0, 0, 0,  1) } {}
 
 	template<class T1> 
-	inline constexpr explicit matrix(matrix<T1, 4, 4> m)
-		: matrix(
+	inline B_CONSTEXPR explicit matrix(matrix<T1, 4, 4> m)
+		: col{
 			vector<T, 4>(m.col[0]),
 			vector<T, 4>(m.col[1]),
 			vector<T, 4>(m.col[2]),
-			vector<T, 4>(m.col[3])) {}
+			vector<T, 4>(m.col[3]) } {}
 
 	template<class T1> 
-	inline constexpr explicit matrix(vector<T1, 4> diag)
-		: matrix(
-			diag.x, T( 0 ), T( 0 ), T( 0 ),
-			T( 0 ), diag.y, T( 0 ), T( 0 ),
-			T( 0 ), T( 0 ), diag.z, T( 0 ),
-			T( 0 ), T( 0 ), T( 0 ), diag.w) {}
+	inline B_CONSTEXPR explicit matrix(vector<T1, 4> diag)
+		: col{
+			vector<T, 4>(diag.x,      0,      0,      0),
+			vector<T, 4>(     0, diag.y,      0,      0),
+			vector<T, 4>(     0,      0, diag.z,      0),
+			vector<T, 4>(     0,      0,      0, diag.w) } {}
 
 	template<class T1> 
-	inline constexpr explicit matrix(T1 diag)
-		: matrix(
-			diag, T(0), T(0), T(0),
-			T(0), diag, T(0), T(0),
-			T(0), T(0), diag, T(0),
-			T(0), T(0), T(0), diag) {}
+	inline B_CONSTEXPR explicit matrix(T1 diag)
+		: col{
+			vector<T, 4>(diag,    0,    0,    0),
+			vector<T, 4>(   0, diag,    0,    0),
+			vector<T, 4>(   0,    0, diag,    0),
+			vector<T, 4>(   0,    0,    0, diag) } {}
 
 	inline vector<T, 4> &operator[](int index) {
 		return col[index];
 	}
-	inline constexpr const vector<T, 4> &operator[](int index) const {
+	inline B_CONSTEXPR const vector<T, 4> &operator[](int index) const {
 		return col[index];
 	}
 };
@@ -514,106 +627,121 @@ struct quaternion {
 		T elem[4];
 	};
 
-	quaternion() = default;
-	constexpr quaternion(const quaternion &q) = default;
+#ifdef B_MATH_HAS_DEFAULT_CONSTRUCTOR
+	inline quaternion() = default;
+	inline B_CONSTEXPR quaternion(const quaternion & q) = default;
+#else
+	inline quaternion() {}
+	inline B_CONSTEXPR quaternion(const quaternion &q)
+		: x(q.x), y(q.y), z(q.z), w(q.w) {};
+#endif
 
 	template<class T1, class T2, class T3, class T4> 
-	inline constexpr quaternion(T1 x, T2 y, T3 z, T4 w)
+	inline B_CONSTEXPR quaternion(T1 x, T2 y, T3 z, T4 w)
 		: x(T(x)), y(T(y)), z(T(z)), w(T(w)) {}
 	
 	template<class T1, class T2> 
-	inline constexpr quaternion(vector<T1, 3> xyz, T2 w)
-		: quaternion(xyz.x, xyz.y, xyz.z, w) {}
+	inline B_CONSTEXPR quaternion(vector<T1, 3> xyz, T2 w)
+		: x(T(xyz.x)), y(T(xyz.y)), z(T(xyz.z)), w(T(w)) {}
 	
 	template<class T1> 
-	inline constexpr explicit quaternion(vector<T1, 4> xyzw)
-		: quaternion(xyzw.x, xyzw.y, xyzw.z, xyzw.w) {}
+	inline B_CONSTEXPR explicit quaternion(vector<T1, 4> xyzw)
+		: x(T(xyzw.x)), y(T(xyzw.y)), z(T(xyzw.z)), w(T(xyzw.w)) {}
 	
 	template<class T1> 
-	inline constexpr explicit quaternion(quaternion<T1> q)
-		: quaternion(q.x, q.y, q.z, q.w) {}
+	inline B_CONSTEXPR explicit quaternion(quaternion<T1> q)
+		: x(T(q.x)), y(T(q.y)), z(T(q.z)), w(T(q.w)) {}
 
 	inline T &operator[](int index) {
 		return elem[index];
 	}
-	inline constexpr const T &operator[](int index) const {
+	inline B_CONSTEXPR const T &operator[](int index) const {
 		return elem[index];
 	}
 };
+
+/* nonstandard extension used: nameless struct/union */
+#if defined(_MSC_VER)
+#	pragma warning(pop)
+#elif defined(__GNUC__) || defined(__MINGW32__)
+#	pragma GCC diagnostic pop
+#elif defined(__clang__)
+#	pragma clang diagnostic pop
+#endif
 
 /*
  * --- Vector Operators ---
  */
 
 template<class T>
-inline constexpr vector<T, 2> operator +(vector<T, 2> v) {
+inline B_CONSTEXPR vector<T, 2> operator +(vector<T, 2> v) {
 	return vector<T, 2>(+v.x, +v.y);
 }
 
 template<class T>
-inline constexpr vector<T, 3> operator +(vector<T, 3> v) {
+inline B_CONSTEXPR vector<T, 3> operator +(vector<T, 3> v) {
 	return vector<T, 3>(+v.x, +v.y, +v.z);
 }
 
 template<class T>
-inline constexpr vector<T, 4> operator +(vector<T, 4> v) {
+inline B_CONSTEXPR vector<T, 4> operator +(vector<T, 4> v) {
 	return vector<T, 4>(+v.x, +v.y, +v.z, +v.w);
 }
 
 template<class T>
-inline constexpr vector<T, 2> operator -(vector<T, 2> v) {
+inline B_CONSTEXPR vector<T, 2> operator -(vector<T, 2> v) {
 	return vector<T, 2>(-v.x, -v.y);
 }
 
 template<class T>
-inline constexpr vector<T, 3> operator -(vector<T, 3> v) {
+inline B_CONSTEXPR vector<T, 3> operator -(vector<T, 3> v) {
 	return vector<T, 3>(-v.x, -v.y, -v.z);
 }
 
 template<class T>
-inline constexpr vector<T, 4> operator -(vector<T, 4> v) {
+inline B_CONSTEXPR vector<T, 4> operator -(vector<T, 4> v) {
 	return vector<T, 4>(-v.x, -v.y, -v.z, -v.w);
 }
 
 template<class T>
-inline constexpr vector<T, 2> operator ~(vector<T, 2> v) {
+inline B_CONSTEXPR vector<T, 2> operator ~(vector<T, 2> v) {
 	return vector<T, 2>(~v.x, ~v.y);
 }
 
 template<class T>
-inline constexpr vector<T, 3> operator ~(vector<T, 3> v) {
+inline B_CONSTEXPR vector<T, 3> operator ~(vector<T, 3> v) {
 	return vector<T, 3>(~v.x, ~v.y, ~v.z);
 }
 
 template<class T>
-inline constexpr vector<T, 4> operator ~(vector<T, 4> v) {
+inline B_CONSTEXPR vector<T, 4> operator ~(vector<T, 4> v) {
 	return vector<T, 4>(~v.x, ~v.y, ~v.z, ~v.w);
 }
 
 template<class T>
-inline constexpr vector<bool, 2> operator !(vector<T, 2> v) {
+inline B_CONSTEXPR vector<bool, 2> operator !(vector<T, 2> v) {
 	return vector<bool, 2>(!v.x, !v.y);
 }
 
 template<class T>
-inline constexpr vector<bool, 3> operator !(vector<T, 3> v) {
+inline B_CONSTEXPR vector<bool, 3> operator !(vector<T, 3> v) {
 	return vector<bool, 3>(!v.x, !v.y, !v.z);
 }
 
 template<class T>
-inline constexpr vector<bool, 4> operator !(vector<T, 4> v) {
+inline B_CONSTEXPR vector<bool, 4> operator !(vector<T, 4> v) {
 	return vector<bool, 4>(!v.x, !v.y, !v.z, !v.w);
 }
 
 template<class T>
-inline constexpr vector<T, 2> operator +(vector<T, 2> left, vector<T, 2> right) {
+inline B_CONSTEXPR vector<T, 2> operator +(vector<T, 2> left, vector<T, 2> right) {
 	return vector<T, 2>(
 		left.x + right.x,
 		left.y + right.y);
 }
 
 template<class T>
-inline constexpr vector<T, 3> operator +(vector<T, 3> left, vector<T, 3> right) {
+inline B_CONSTEXPR vector<T, 3> operator +(vector<T, 3> left, vector<T, 3> right) {
 	return vector<T, 3>(
 		left.x + right.x,
 		left.y + right.y,
@@ -621,7 +749,7 @@ inline constexpr vector<T, 3> operator +(vector<T, 3> left, vector<T, 3> right) 
 }
 
 template<class T>
-inline constexpr vector<T, 4> operator +(vector<T, 4> left, vector<T, 4> right) {
+inline B_CONSTEXPR vector<T, 4> operator +(vector<T, 4> left, vector<T, 4> right) {
 	return vector<T, 4>(
 		left.x + right.x,
 		left.y + right.y,
@@ -630,14 +758,14 @@ inline constexpr vector<T, 4> operator +(vector<T, 4> left, vector<T, 4> right) 
 }
 
 template<class T>
-inline constexpr vector<T, 2> operator -(vector<T, 2> left, vector<T, 2> right) {
+inline B_CONSTEXPR vector<T, 2> operator -(vector<T, 2> left, vector<T, 2> right) {
 	return vector<T, 2>(
 		left.x - right.x,
 		left.y - right.y);
 }
 
 template<class T>
-inline constexpr vector<T, 3> operator -(vector<T, 3> left, vector<T, 3> right) {
+inline B_CONSTEXPR vector<T, 3> operator -(vector<T, 3> left, vector<T, 3> right) {
 	return vector<T, 3>(
 		left.x - right.x,
 		left.y - right.y,
@@ -645,7 +773,7 @@ inline constexpr vector<T, 3> operator -(vector<T, 3> left, vector<T, 3> right) 
 }
 
 template<class T>
-inline constexpr vector<T, 4> operator -(vector<T, 4> left, vector<T, 4> right) {
+inline B_CONSTEXPR vector<T, 4> operator -(vector<T, 4> left, vector<T, 4> right) {
 	return vector<T, 4>(
 		left.x - right.x,
 		left.y - right.y,
@@ -654,14 +782,14 @@ inline constexpr vector<T, 4> operator -(vector<T, 4> left, vector<T, 4> right) 
 }
 
 template<class T>
-inline constexpr vector<T, 2> operator *(vector<T, 2> left, vector<T, 2> right) {
+inline B_CONSTEXPR vector<T, 2> operator *(vector<T, 2> left, vector<T, 2> right) {
 	return vector<T, 2>(
 		left.x * right.x,
 		left.y * right.y);
 }
 
 template<class T>
-inline constexpr vector<T, 3> operator *(vector<T, 3> left, vector<T, 3> right) {
+inline B_CONSTEXPR vector<T, 3> operator *(vector<T, 3> left, vector<T, 3> right) {
 	return vector<T, 3>(
 		left.x * right.x,
 		left.y * right.y,
@@ -669,7 +797,7 @@ inline constexpr vector<T, 3> operator *(vector<T, 3> left, vector<T, 3> right) 
 }
 
 template<class T>
-inline constexpr vector<T, 4> operator *(vector<T, 4> left, vector<T, 4> right) {
+inline B_CONSTEXPR vector<T, 4> operator *(vector<T, 4> left, vector<T, 4> right) {
 	return vector<T, 4>(
 		left.x * right.x,
 		left.y * right.y,
@@ -678,14 +806,14 @@ inline constexpr vector<T, 4> operator *(vector<T, 4> left, vector<T, 4> right) 
 }
 
 template<class T>
-inline constexpr vector<T, 2> operator /(vector<T, 2> left, vector<T, 2> right) {
+inline B_CONSTEXPR vector<T, 2> operator /(vector<T, 2> left, vector<T, 2> right) {
 	return vector<T, 2>(
 		left.x / right.x,
 		left.y / right.y);
 }
 
 template<class T>
-inline constexpr vector<T, 3> operator /(vector<T, 3> left, vector<T, 3> right) {
+inline B_CONSTEXPR vector<T, 3> operator /(vector<T, 3> left, vector<T, 3> right) {
 	return vector<T, 3>(
 		left.x / right.x,
 		left.y / right.y,
@@ -693,7 +821,7 @@ inline constexpr vector<T, 3> operator /(vector<T, 3> left, vector<T, 3> right) 
 }
 
 template<class T>
-inline constexpr vector<T, 4> operator /(vector<T, 4> left, vector<T, 4> right) {
+inline B_CONSTEXPR vector<T, 4> operator /(vector<T, 4> left, vector<T, 4> right) {
 	return vector<T, 4>(
 		left.x / right.x,
 		left.y / right.y,
@@ -702,14 +830,14 @@ inline constexpr vector<T, 4> operator /(vector<T, 4> left, vector<T, 4> right) 
 }
 
 template<class T>
-inline constexpr vector<T, 2> operator %(vector<T, 2> left, vector<T, 2> right) {
+inline B_CONSTEXPR vector<T, 2> operator %(vector<T, 2> left, vector<T, 2> right) {
 	return vector<T, 2>(
 		left.x % right.x,
 		left.y % right.y);
 }
 
 template<class T>
-inline constexpr vector<T, 3> operator %(vector<T, 3> left, vector<T, 3> right) {
+inline B_CONSTEXPR vector<T, 3> operator %(vector<T, 3> left, vector<T, 3> right) {
 	return vector<T, 3>(
 		left.x % right.x,
 		left.y % right.y,
@@ -717,7 +845,7 @@ inline constexpr vector<T, 3> operator %(vector<T, 3> left, vector<T, 3> right) 
 }
 
 template<class T>
-inline constexpr vector<T, 4> operator %(vector<T, 4> left, vector<T, 4> right) {
+inline B_CONSTEXPR vector<T, 4> operator %(vector<T, 4> left, vector<T, 4> right) {
 	return vector<T, 4>(
 		left.x % right.x,
 		left.y % right.y,
@@ -726,14 +854,14 @@ inline constexpr vector<T, 4> operator %(vector<T, 4> left, vector<T, 4> right) 
 }
 
 template<class T>
-inline constexpr vector<T, 2> operator &(vector<T, 2> left, vector<T, 2> right) {
+inline B_CONSTEXPR vector<T, 2> operator &(vector<T, 2> left, vector<T, 2> right) {
 	return vector<T, 2>(
 		left.x & right.x,
 		left.y & right.y);
 }
 
 template<class T>
-inline constexpr vector<T, 3> operator &(vector<T, 3> left, vector<T, 3> right) {
+inline B_CONSTEXPR vector<T, 3> operator &(vector<T, 3> left, vector<T, 3> right) {
 	return vector<T, 3>(
 		left.x & right.x,
 		left.y & right.y,
@@ -741,7 +869,7 @@ inline constexpr vector<T, 3> operator &(vector<T, 3> left, vector<T, 3> right) 
 }
 
 template<class T>
-inline constexpr vector<T, 4> operator &(vector<T, 4> left, vector<T, 4> right) {
+inline B_CONSTEXPR vector<T, 4> operator &(vector<T, 4> left, vector<T, 4> right) {
 	return vector<T, 4>(
 		left.x & right.x,
 		left.y & right.y,
@@ -750,14 +878,14 @@ inline constexpr vector<T, 4> operator &(vector<T, 4> left, vector<T, 4> right) 
 }
 
 template<class T>
-inline constexpr vector<T, 2> operator |(vector<T, 2> left, vector<T, 2> right) {
+inline B_CONSTEXPR vector<T, 2> operator |(vector<T, 2> left, vector<T, 2> right) {
 	return vector<T, 2>(
 		left.x | right.x,
 		left.y | right.y);
 }
 
 template<class T>
-inline constexpr vector<T, 3> operator |(vector<T, 3> left, vector<T, 3> right) {
+inline B_CONSTEXPR vector<T, 3> operator |(vector<T, 3> left, vector<T, 3> right) {
 	return vector<T, 3>(
 		left.x | right.x,
 		left.y | right.y,
@@ -765,7 +893,7 @@ inline constexpr vector<T, 3> operator |(vector<T, 3> left, vector<T, 3> right) 
 }
 
 template<class T>
-inline constexpr vector<T, 4> operator |(vector<T, 4> left, vector<T, 4> right) {
+inline B_CONSTEXPR vector<T, 4> operator |(vector<T, 4> left, vector<T, 4> right) {
 	return vector<T, 4>(
 		left.x | right.x,
 		left.y | right.y,
@@ -774,14 +902,14 @@ inline constexpr vector<T, 4> operator |(vector<T, 4> left, vector<T, 4> right) 
 }
 
 template<class T>
-inline constexpr vector<T, 2> operator ^(vector<T, 2> left, vector<T, 2> right) {
+inline B_CONSTEXPR vector<T, 2> operator ^(vector<T, 2> left, vector<T, 2> right) {
 	return vector<T, 2>(
 		left.x ^ right.x,
 		left.y ^ right.y);
 }
 
 template<class T>
-inline constexpr vector<T, 3> operator ^(vector<T, 3> left, vector<T, 3> right) {
+inline B_CONSTEXPR vector<T, 3> operator ^(vector<T, 3> left, vector<T, 3> right) {
 	return vector<T, 3>(
 		left.x ^ right.x,
 		left.y ^ right.y,
@@ -789,7 +917,7 @@ inline constexpr vector<T, 3> operator ^(vector<T, 3> left, vector<T, 3> right) 
 }
 
 template<class T>
-inline constexpr vector<T, 4> operator ^(vector<T, 4> left, vector<T, 4> right) {
+inline B_CONSTEXPR vector<T, 4> operator ^(vector<T, 4> left, vector<T, 4> right) {
 	return vector<T, 4>(
 		left.x ^ right.x,
 		left.y ^ right.y,
@@ -798,14 +926,14 @@ inline constexpr vector<T, 4> operator ^(vector<T, 4> left, vector<T, 4> right) 
 }
 
 template<class T>
-inline constexpr vector<T, 2> operator <<(vector<T, 2> left, vector<T, 2> right) {
+inline B_CONSTEXPR vector<T, 2> operator <<(vector<T, 2> left, vector<T, 2> right) {
 	return vector<T, 2>(
 		left.x << right.x,
 		left.y << right.y);
 }
 
 template<class T>
-inline constexpr vector<T, 3> operator <<(vector<T, 3> left, vector<T, 3> right) {
+inline B_CONSTEXPR vector<T, 3> operator <<(vector<T, 3> left, vector<T, 3> right) {
 	return vector<T, 3>(
 		left.x << right.x,
 		left.y << right.y,
@@ -813,7 +941,7 @@ inline constexpr vector<T, 3> operator <<(vector<T, 3> left, vector<T, 3> right)
 }
 
 template<class T>
-inline constexpr vector<T, 4> operator <<(vector<T, 4> left, vector<T, 4> right) {
+inline B_CONSTEXPR vector<T, 4> operator <<(vector<T, 4> left, vector<T, 4> right) {
 	return vector<T, 4>(
 		left.x << right.x,
 		left.y << right.y,
@@ -822,14 +950,14 @@ inline constexpr vector<T, 4> operator <<(vector<T, 4> left, vector<T, 4> right)
 }
 
 template<class T>
-inline constexpr vector<T, 2> operator >>(vector<T, 2> left, vector<T, 2> right) {
+inline B_CONSTEXPR vector<T, 2> operator >>(vector<T, 2> left, vector<T, 2> right) {
 	return vector<T, 2>(
 		left.x >> right.x,
 		left.y >> right.y);
 }
 
 template<class T>
-inline constexpr vector<T, 3> operator >>(vector<T, 3> left, vector<T, 3> right) {
+inline B_CONSTEXPR vector<T, 3> operator >>(vector<T, 3> left, vector<T, 3> right) {
 	return vector<T, 3>(
 		left.x >> right.x,
 		left.y >> right.y,
@@ -837,7 +965,7 @@ inline constexpr vector<T, 3> operator >>(vector<T, 3> left, vector<T, 3> right)
 }
 
 template<class T>
-inline constexpr vector<T, 4> operator >>(vector<T, 4> left, vector<T, 4> right) {
+inline B_CONSTEXPR vector<T, 4> operator >>(vector<T, 4> left, vector<T, 4> right) {
 	return vector<T, 4>(
 		left.x >> right.x,
 		left.y >> right.y,
@@ -846,14 +974,14 @@ inline constexpr vector<T, 4> operator >>(vector<T, 4> left, vector<T, 4> right)
 }
 
 template<class T>
-inline constexpr vector<bool, 2> operator ==(vector<T, 2> left, vector<T, 2> right) {
+inline B_CONSTEXPR vector<bool, 2> operator ==(vector<T, 2> left, vector<T, 2> right) {
 	return vector<bool, 2>(
 		left.x == right.x,
 		left.y == right.y);
 }
 
 template<class T>
-inline constexpr vector<bool, 3> operator ==(vector<T, 3> left, vector<T, 3> right) {
+inline B_CONSTEXPR vector<bool, 3> operator ==(vector<T, 3> left, vector<T, 3> right) {
 	return vector<bool, 3>(
 		left.x == right.x,
 		left.y == right.y,
@@ -861,7 +989,7 @@ inline constexpr vector<bool, 3> operator ==(vector<T, 3> left, vector<T, 3> rig
 }
 
 template<class T>
-inline constexpr vector<bool, 4> operator ==(vector<T, 4> left, vector<T, 4> right) {
+inline B_CONSTEXPR vector<bool, 4> operator ==(vector<T, 4> left, vector<T, 4> right) {
 	return vector<bool, 4>(
 		left.x == right.x,
 		left.y == right.y,
@@ -870,14 +998,14 @@ inline constexpr vector<bool, 4> operator ==(vector<T, 4> left, vector<T, 4> rig
 }
 
 template<class T>
-inline constexpr vector<bool, 2> operator !=(vector<T, 2> left, vector<T, 2> right) {
+inline B_CONSTEXPR vector<bool, 2> operator !=(vector<T, 2> left, vector<T, 2> right) {
 	return vector<bool, 2>(
 		left.x != right.x,
 		left.y != right.y);
 }
 
 template<class T>
-inline constexpr vector<bool, 3> operator !=(vector<T, 3> left, vector<T, 3> right) {
+inline B_CONSTEXPR vector<bool, 3> operator !=(vector<T, 3> left, vector<T, 3> right) {
 	return vector<bool, 3>(
 		left.x != right.x,
 		left.y != right.y,
@@ -885,7 +1013,7 @@ inline constexpr vector<bool, 3> operator !=(vector<T, 3> left, vector<T, 3> rig
 }
 
 template<class T>
-inline constexpr vector<bool, 4> operator !=(vector<T, 4> left, vector<T, 4> right) {
+inline B_CONSTEXPR vector<bool, 4> operator !=(vector<T, 4> left, vector<T, 4> right) {
 	return vector<bool, 4>(
 		left.x != right.x,
 		left.y != right.y,
@@ -894,14 +1022,14 @@ inline constexpr vector<bool, 4> operator !=(vector<T, 4> left, vector<T, 4> rig
 }
 
 template<class T>
-inline constexpr vector<bool, 2> operator >=(vector<T, 2> left, vector<T, 2> right) {
+inline B_CONSTEXPR vector<bool, 2> operator >=(vector<T, 2> left, vector<T, 2> right) {
 	return vector<bool, 2>(
 		left.x >= right.x,
 		left.y >= right.y);
 }
 
 template<class T>
-inline constexpr vector<bool, 3> operator >=(vector<T, 3> left, vector<T, 3> right) {
+inline B_CONSTEXPR vector<bool, 3> operator >=(vector<T, 3> left, vector<T, 3> right) {
 	return vector<bool, 3>(
 		left.x >= right.x,
 		left.y >= right.y,
@@ -909,7 +1037,7 @@ inline constexpr vector<bool, 3> operator >=(vector<T, 3> left, vector<T, 3> rig
 }
 
 template<class T>
-inline constexpr vector<bool, 4> operator >=(vector<T, 4> left, vector<T, 4> right) {
+inline B_CONSTEXPR vector<bool, 4> operator >=(vector<T, 4> left, vector<T, 4> right) {
 	return vector<bool, 4>(
 		left.x >= right.x,
 		left.y >= right.y,
@@ -918,14 +1046,14 @@ inline constexpr vector<bool, 4> operator >=(vector<T, 4> left, vector<T, 4> rig
 }
 
 template<class T>
-inline constexpr vector<bool, 2> operator <=(vector<T, 2> left, vector<T, 2> right) {
+inline B_CONSTEXPR vector<bool, 2> operator <=(vector<T, 2> left, vector<T, 2> right) {
 	return vector<bool, 2>(
 		left.x <= right.x,
 		left.y <= right.y);
 }
 
 template<class T>
-inline constexpr vector<bool, 3> operator <=(vector<T, 3> left, vector<T, 3> right) {
+inline B_CONSTEXPR vector<bool, 3> operator <=(vector<T, 3> left, vector<T, 3> right) {
 	return vector<bool, 3>(
 		left.x <= right.x,
 		left.y <= right.y,
@@ -933,7 +1061,7 @@ inline constexpr vector<bool, 3> operator <=(vector<T, 3> left, vector<T, 3> rig
 }
 
 template<class T>
-inline constexpr vector<bool, 4> operator <=(vector<T, 4> left, vector<T, 4> right) {
+inline B_CONSTEXPR vector<bool, 4> operator <=(vector<T, 4> left, vector<T, 4> right) {
 	return vector<bool, 4>(
 		left.x <= right.x,
 		left.y <= right.y,
@@ -942,14 +1070,14 @@ inline constexpr vector<bool, 4> operator <=(vector<T, 4> left, vector<T, 4> rig
 }
 
 template<class T>
-inline constexpr vector<bool, 2> operator >(vector<T, 2> left, vector<T, 2> right) {
+inline B_CONSTEXPR vector<bool, 2> operator >(vector<T, 2> left, vector<T, 2> right) {
 	return vector<bool, 2>(
 		left.x > right.x,
 		left.y > right.y);
 }
 
 template<class T>
-inline constexpr vector<bool, 3> operator >(vector<T, 3> left, vector<T, 3> right) {
+inline B_CONSTEXPR vector<bool, 3> operator >(vector<T, 3> left, vector<T, 3> right) {
 	return vector<bool, 3>(
 		left.x > right.x,
 		left.y > right.y,
@@ -957,7 +1085,7 @@ inline constexpr vector<bool, 3> operator >(vector<T, 3> left, vector<T, 3> righ
 }
 
 template<class T>
-inline constexpr vector<bool, 4> operator >(vector<T, 4> left, vector<T, 4> right) {
+inline B_CONSTEXPR vector<bool, 4> operator >(vector<T, 4> left, vector<T, 4> right) {
 	return vector<bool, 4>(
 		left.x > right.x,
 		left.y > right.y,
@@ -966,14 +1094,14 @@ inline constexpr vector<bool, 4> operator >(vector<T, 4> left, vector<T, 4> righ
 }
 
 template<class T>
-inline constexpr vector<bool, 2> operator <(vector<T, 2> left, vector<T, 2> right) {
+inline B_CONSTEXPR vector<bool, 2> operator <(vector<T, 2> left, vector<T, 2> right) {
 	return vector<bool, 2>(
 		left.x < right.x,
 		left.y < right.y);
 }
 
 template<class T>
-inline constexpr vector<bool, 3> operator <(vector<T, 3> left, vector<T, 3> right) {
+inline B_CONSTEXPR vector<bool, 3> operator <(vector<T, 3> left, vector<T, 3> right) {
 	return vector<bool, 3>(
 		left.x < right.x,
 		left.y < right.y,
@@ -981,7 +1109,7 @@ inline constexpr vector<bool, 3> operator <(vector<T, 3> left, vector<T, 3> righ
 }
 
 template<class T>
-inline constexpr vector<bool, 4> operator <(vector<T, 4> left, vector<T, 4> right) {
+inline B_CONSTEXPR vector<bool, 4> operator <(vector<T, 4> left, vector<T, 4> right) {
 	return vector<bool, 4>(
 		left.x < right.x,
 		left.y < right.y,
@@ -990,162 +1118,162 @@ inline constexpr vector<bool, 4> operator <(vector<T, 4> left, vector<T, 4> righ
 }
 
 template<class T, int N>
-inline constexpr vector<T, N> operator +(vector<T, N> left, T right) {
+inline B_CONSTEXPR vector<T, N> operator +(vector<T, N> left, T right) {
 	return left + vector<T, N>(right);
 }
 
 template<class T, int N>
-inline constexpr vector<T, N> operator -(vector<T, N> left, T right) {
+inline B_CONSTEXPR vector<T, N> operator -(vector<T, N> left, T right) {
 	return left - vector<T, N>(right);
 }
 
 template<class T, int N>
-inline constexpr vector<T, N> operator *(vector<T, N> left, T right) {
+inline B_CONSTEXPR vector<T, N> operator *(vector<T, N> left, T right) {
 	return left * vector<T, N>(right);
 }
 
 template<class T, int N>
-inline constexpr vector<T, N> operator /(vector<T, N> left, T right) {
+inline B_CONSTEXPR vector<T, N> operator /(vector<T, N> left, T right) {
 	return left / vector<T, N>(right);
 }
 
 template<class T, int N>
-inline constexpr vector<T, N> operator %(vector<T, N> left, T right) {
+inline B_CONSTEXPR vector<T, N> operator %(vector<T, N> left, T right) {
 	return left % vector<T, N>(right);
 }
 
 template<class T, int N>
-inline constexpr vector<T, N> operator &(vector<T, N> left, T right) {
+inline B_CONSTEXPR vector<T, N> operator &(vector<T, N> left, T right) {
 	return left & vector<T, N>(right);
 }
 
 template<class T, int N>
-inline constexpr vector<T, N> operator |(vector<T, N> left, T right) {
+inline B_CONSTEXPR vector<T, N> operator |(vector<T, N> left, T right) {
 	return left | vector<T, N>(right);
 }
 
 template<class T, int N>
-inline constexpr vector<T, N> operator ^(vector<T, N> left, T right) {
+inline B_CONSTEXPR vector<T, N> operator ^(vector<T, N> left, T right) {
 	return left ^ vector<T, N>(right);
 }
 
 template<class T, int N>
-inline constexpr vector<T, N> operator <<(vector<T, N> left, T right) {
+inline B_CONSTEXPR vector<T, N> operator <<(vector<T, N> left, T right) {
 	return left << vector<T, N>(right);
 }
 
 template<class T, int N>
-inline constexpr vector<T, N> operator >>(vector<T, N> left, T right) {
+inline B_CONSTEXPR vector<T, N> operator >>(vector<T, N> left, T right) {
 	return left >> vector<T, N>(right);
 }
 
 template<class T, int N>
-inline constexpr vector<bool, N> operator ==(vector<T, N> left, T right) {
+inline B_CONSTEXPR vector<bool, N> operator ==(vector<T, N> left, T right) {
 	return left == vector<T, N>(right);
 }
 
 template<class T, int N>
-inline constexpr vector<bool, N> operator !=(vector<T, N> left, T right) {
+inline B_CONSTEXPR vector<bool, N> operator !=(vector<T, N> left, T right) {
 	return left != vector<T, N>(right);
 }
 
 template<class T, int N>
-inline constexpr vector<bool, N> operator >=(vector<T, N> left, T right) {
+inline B_CONSTEXPR vector<bool, N> operator >=(vector<T, N> left, T right) {
 	return left >= vector<T, N>(right);
 }
 
 template<class T, int N>
-inline constexpr vector<bool, N> operator <=(vector<T, N> left, T right) {
+inline B_CONSTEXPR vector<bool, N> operator <=(vector<T, N> left, T right) {
 	return left <= vector<T, N>(right);
 }
 
 template<class T, int N>
-inline constexpr vector<bool, N> operator >(vector<T, N> left, T right) {
+inline B_CONSTEXPR vector<bool, N> operator >(vector<T, N> left, T right) {
 	return left > vector<T, N>(right);
 }
 
 template<class T, int N>
-inline constexpr vector<bool, N> operator <(vector<T, N> left, T right) {
+inline B_CONSTEXPR vector<bool, N> operator <(vector<T, N> left, T right) {
 	return left < vector<T, N>(right);
 }
 
 template<class T, int N>
-inline constexpr vector<T, N> operator +(T left, vector<T, N> right) {
+inline B_CONSTEXPR vector<T, N> operator +(T left, vector<T, N> right) {
 	return vector<T, N>(left) + right;
 }
 
 template<class T, int N>
-inline constexpr vector<T, N> operator -(T left, vector<T, N> right) {
+inline B_CONSTEXPR vector<T, N> operator -(T left, vector<T, N> right) {
 	return vector<T, N>(left) - right;
 }
 
 template<class T, int N>
-inline constexpr vector<T, N> operator *(T left, vector<T, N> right) {
+inline B_CONSTEXPR vector<T, N> operator *(T left, vector<T, N> right) {
 	return vector<T, N>(left) * right;
 }
 
 template<class T, int N>
-inline constexpr vector<T, N> operator /(T left, vector<T, N> right) {
+inline B_CONSTEXPR vector<T, N> operator /(T left, vector<T, N> right) {
 	return vector<T, N>(left) / right;
 }
 
 template<class T, int N>
-inline constexpr vector<T, N> operator %(T left, vector<T, N> right) {
+inline B_CONSTEXPR vector<T, N> operator %(T left, vector<T, N> right) {
 	return vector<T, N>(left) % right;
 }
 
 template<class T, int N>
-inline constexpr vector<T, N> operator &(T left, vector<T, N> right) {
+inline B_CONSTEXPR vector<T, N> operator &(T left, vector<T, N> right) {
 	return vector<T, N>(left) & right;
 }
 
 template<class T, int N>
-inline constexpr vector<T, N> operator |(T left, vector<T, N> right) {
+inline B_CONSTEXPR vector<T, N> operator |(T left, vector<T, N> right) {
 	return vector<T, N>(left) | right;
 }
 
 template<class T, int N>
-inline constexpr vector<T, N> operator ^(T left, vector<T, N> right) {
+inline B_CONSTEXPR vector<T, N> operator ^(T left, vector<T, N> right) {
 	return vector<T, N>(left) ^ right;
 }
 
 template<class T, int N>
-inline constexpr vector<T, N> operator <<(T left, vector<T, N> right) {
+inline B_CONSTEXPR vector<T, N> operator <<(T left, vector<T, N> right) {
 	return vector<T, N>(left) << right;
 }
 
 template<class T, int N>
-inline constexpr vector<T, N> operator >>(T left, vector<T, N> right) {
+inline B_CONSTEXPR vector<T, N> operator >>(T left, vector<T, N> right) {
 	return vector<T, N>(left) >> right;
 }
 
 template<class T, int N>
-inline constexpr vector<bool, N> operator ==(T left, vector<T, N> right) {
+inline B_CONSTEXPR vector<bool, N> operator ==(T left, vector<T, N> right) {
 	return vector<T, N>(left) == right;
 }
 
 template<class T, int N>
-inline constexpr vector<bool, N> operator !=(T left, vector<T, N> right) {
+inline B_CONSTEXPR vector<bool, N> operator !=(T left, vector<T, N> right) {
 	return vector<T, N>(left) != right;
 }
 
 template<class T, int N>
-inline constexpr vector<bool, N> operator >=(T left, vector<T, N> right) {
+inline B_CONSTEXPR vector<bool, N> operator >=(T left, vector<T, N> right) {
 	return vector<T, N>(left) >= right;
 }
 
 template<class T, int N>
-inline constexpr vector<bool, N> operator <=(T left, vector<T, N> right) {
+inline B_CONSTEXPR vector<bool, N> operator <=(T left, vector<T, N> right) {
 	return vector<T, N>(left) <= right;
 }
 
 template<class T, int N>
-inline constexpr vector<bool, N> operator >(T left, vector<T, N> right) {
+inline B_CONSTEXPR vector<bool, N> operator >(T left, vector<T, N> right) {
 	return vector<T, N>(left) > right;
 }
 
 template<class T, int N>
-inline constexpr vector<bool, N> operator <(T left, vector<T, N> right) {
+inline B_CONSTEXPR vector<bool, N> operator <(T left, vector<T, N> right) {
 	return vector<T, N>(left) < right;
 }
 
@@ -1266,14 +1394,14 @@ inline vector<T, N> operator ++(vector<T, N> &v, int) {
  */
 
 template<class T>
-inline constexpr matrix<T, 2, 2> operator +(matrix<T, 2, 2> m) {
+inline B_CONSTEXPR matrix<T, 2, 2> operator +(matrix<T, 2, 2> m) {
 	return matrix<T, 2, 2>(
 		+m.col[0],
 		+m.col[1]);
 }
 
 template<class T>
-inline constexpr matrix<T, 3, 3> operator +(matrix<T, 3, 3> m) {
+inline B_CONSTEXPR matrix<T, 3, 3> operator +(matrix<T, 3, 3> m) {
 	return matrix<T, 3, 3>(
 		+m.col[0],
 		+m.col[1],
@@ -1281,7 +1409,7 @@ inline constexpr matrix<T, 3, 3> operator +(matrix<T, 3, 3> m) {
 }
 
 template<class T>
-inline constexpr matrix<T, 4, 4> operator +(matrix<T, 4, 4> m) {
+inline B_CONSTEXPR matrix<T, 4, 4> operator +(matrix<T, 4, 4> m) {
 	return matrix<T, 4, 4>(
 		+m.col[0],
 		+m.col[1],
@@ -1290,14 +1418,14 @@ inline constexpr matrix<T, 4, 4> operator +(matrix<T, 4, 4> m) {
 }
 
 template<class T>
-inline constexpr matrix<T, 2, 2> operator -(matrix<T, 2, 2> m) {
+inline B_CONSTEXPR matrix<T, 2, 2> operator -(matrix<T, 2, 2> m) {
 	return matrix<T, 2, 2>(
 		-m.col[0],
 		-m.col[1]);
 }
 
 template<class T>
-inline constexpr matrix<T, 3, 3> operator -(matrix<T, 3, 3> m) {
+inline B_CONSTEXPR matrix<T, 3, 3> operator -(matrix<T, 3, 3> m) {
 	return matrix<T, 3, 3>(
 		-m.col[0],
 		-m.col[1],
@@ -1305,7 +1433,7 @@ inline constexpr matrix<T, 3, 3> operator -(matrix<T, 3, 3> m) {
 }
 
 template<class T>
-inline constexpr matrix<T, 4, 4> operator -(matrix<T, 4, 4> m) {
+inline B_CONSTEXPR matrix<T, 4, 4> operator -(matrix<T, 4, 4> m) {
 	return matrix<T, 4, 4>(
 		-m.col[0],
 		-m.col[1],
@@ -1314,14 +1442,14 @@ inline constexpr matrix<T, 4, 4> operator -(matrix<T, 4, 4> m) {
 }
 
 template<class T>
-inline constexpr matrix<T, 2, 2> operator +(matrix<T, 2, 2> left, matrix<T, 2, 2> right) {
+inline B_CONSTEXPR matrix<T, 2, 2> operator +(matrix<T, 2, 2> left, matrix<T, 2, 2> right) {
 	return matrix<T, 2, 2>(
 		left.col[0] + right.col[0],
 		left.col[1] + right.col[1]);
 }
 
 template<class T>
-inline constexpr matrix<T, 3, 3> operator +(matrix<T, 3, 3> left, matrix<T, 3, 3> right) {
+inline B_CONSTEXPR matrix<T, 3, 3> operator +(matrix<T, 3, 3> left, matrix<T, 3, 3> right) {
 	return matrix<T, 3, 3>(
 		left.col[0] + right.col[0],
 		left.col[1] + right.col[1],
@@ -1329,7 +1457,7 @@ inline constexpr matrix<T, 3, 3> operator +(matrix<T, 3, 3> left, matrix<T, 3, 3
 }
 
 template<class T>
-inline constexpr matrix<T, 4, 4> operator +(matrix<T, 4, 4> left, matrix<T, 4, 4> right) {
+inline B_CONSTEXPR matrix<T, 4, 4> operator +(matrix<T, 4, 4> left, matrix<T, 4, 4> right) {
 	return matrix<T, 4, 4>(
 		left.col[0] + right.col[0],
 		left.col[1] + right.col[1],
@@ -1338,14 +1466,14 @@ inline constexpr matrix<T, 4, 4> operator +(matrix<T, 4, 4> left, matrix<T, 4, 4
 }
 
 template<class T>
-inline constexpr matrix<T, 2, 2> operator -(matrix<T, 2, 2> left, matrix<T, 2, 2> right) {
+inline B_CONSTEXPR matrix<T, 2, 2> operator -(matrix<T, 2, 2> left, matrix<T, 2, 2> right) {
 	return matrix<T, 2, 2>(
 		left.col[0] - right.col[0],
 		left.col[1] - right.col[1]);
 }
 
 template<class T>
-inline constexpr matrix<T, 3, 3> operator -(matrix<T, 3, 3> left, matrix<T, 3, 3> right) {
+inline B_CONSTEXPR matrix<T, 3, 3> operator -(matrix<T, 3, 3> left, matrix<T, 3, 3> right) {
 	return matrix<T, 3, 3>(
 		left.col[0] - right.col[0],
 		left.col[1] - right.col[1],
@@ -1353,7 +1481,7 @@ inline constexpr matrix<T, 3, 3> operator -(matrix<T, 3, 3> left, matrix<T, 3, 3
 }
 
 template<class T>
-inline constexpr matrix<T, 4, 4> operator -(matrix<T, 4, 4> left, matrix<T, 4, 4> right) {
+inline B_CONSTEXPR matrix<T, 4, 4> operator -(matrix<T, 4, 4> left, matrix<T, 4, 4> right) {
 	return matrix<T, 4, 4>(
 		left.col[0] - right.col[0],
 		left.col[1] - right.col[1],
@@ -1362,7 +1490,7 @@ inline constexpr matrix<T, 4, 4> operator -(matrix<T, 4, 4> left, matrix<T, 4, 4
 }
 
 template<class T>
-inline constexpr matrix<T, 2, 2> operator *(matrix<T, 2, 2> left, matrix<T, 2, 2> right) {
+inline B_CONSTEXPR matrix<T, 2, 2> operator *(matrix<T, 2, 2> left, matrix<T, 2, 2> right) {
 	return matrix<T, 2, 2>(
 
 		left.col[0].x * right.col[0].x + left.col[1].x * right.col[0].y,
@@ -1373,7 +1501,7 @@ inline constexpr matrix<T, 2, 2> operator *(matrix<T, 2, 2> left, matrix<T, 2, 2
 }
 
 template<class T>
-inline constexpr matrix<T, 3, 3> operator *(matrix<T, 3, 3> left, matrix<T, 3, 3> right) {
+inline B_CONSTEXPR matrix<T, 3, 3> operator *(matrix<T, 3, 3> left, matrix<T, 3, 3> right) {
 	return matrix<T, 3, 3>(
 
 		left.col[0].x * right.col[0].x + left.col[1].x * right.col[0].y + left.col[2].x * right.col[0].z,
@@ -1390,7 +1518,7 @@ inline constexpr matrix<T, 3, 3> operator *(matrix<T, 3, 3> left, matrix<T, 3, 3
 }
 
 template<class T>
-inline constexpr matrix<T, 4, 4> operator *(matrix<T, 4, 4> left, matrix<T, 4, 4> right) {
+inline B_CONSTEXPR matrix<T, 4, 4> operator *(matrix<T, 4, 4> left, matrix<T, 4, 4> right) {
 	return matrix<T, 4, 4>(
 
 		left.col[0].x * right.col[0].x + left.col[1].x * right.col[0].y + left.col[2].x * right.col[0].z + left.col[3].x * right.col[0].w,
@@ -1415,14 +1543,14 @@ inline constexpr matrix<T, 4, 4> operator *(matrix<T, 4, 4> left, matrix<T, 4, 4
 }
 
 template<class T>
-inline constexpr vector<T, 2> operator *(matrix<T, 2, 2> left, vector<T, 2> right) {
+inline B_CONSTEXPR vector<T, 2> operator *(matrix<T, 2, 2> left, vector<T, 2> right) {
 	return vector<T, 2>(
 		left.col[0].x * right.x + left.col[1].x * right.y,
 		left.col[0].y * right.x + left.col[1].y * right.y);
 }
 
 template<class T>
-inline constexpr vector<T, 3> operator *(matrix<T, 3, 3> left, vector<T, 3> right) {
+inline B_CONSTEXPR vector<T, 3> operator *(matrix<T, 3, 3> left, vector<T, 3> right) {
 	return vector<T, 3>(
 		left.col[0].x * right.x + left.col[1].x * right.y + left.col[2].x * right.z,
 		left.col[0].y * right.x + left.col[1].y * right.y + left.col[2].y * right.z,
@@ -1430,7 +1558,7 @@ inline constexpr vector<T, 3> operator *(matrix<T, 3, 3> left, vector<T, 3> righ
 }
 
 template<class T>
-inline constexpr vector<T, 4> operator *(matrix<T, 4, 4> left, vector<T, 4> right) {
+inline B_CONSTEXPR vector<T, 4> operator *(matrix<T, 4, 4> left, vector<T, 4> right) {
 	return vector<T, 4>(
 		left.col[0].x * right.x + left.col[1].x * right.y + left.col[2].x * right.z + left.col[3].x * right.w,
 		left.col[0].y * right.x + left.col[1].y * right.y + left.col[2].y * right.z + left.col[3].y * right.w,
@@ -1439,14 +1567,14 @@ inline constexpr vector<T, 4> operator *(matrix<T, 4, 4> left, vector<T, 4> righ
 }
 
 template<class T>
-inline constexpr matrix<T, 2, 2> operator /(matrix<T, 2, 2> left, matrix<T, 2, 2> right) {
+inline B_CONSTEXPR matrix<T, 2, 2> operator /(matrix<T, 2, 2> left, matrix<T, 2, 2> right) {
 	return matrix<T, 2, 2>(
 		left.col[0] / right.col[0],
 		left.col[1] / right.col[1]);
 }
 
 template<class T>
-inline constexpr matrix<T, 3, 3> operator /(matrix<T, 3, 3> left, matrix<T, 3, 3> right) {
+inline B_CONSTEXPR matrix<T, 3, 3> operator /(matrix<T, 3, 3> left, matrix<T, 3, 3> right) {
 	return matrix<T, 3, 3>(
 		left.col[0] / right.col[0],
 		left.col[1] / right.col[1],
@@ -1454,7 +1582,7 @@ inline constexpr matrix<T, 3, 3> operator /(matrix<T, 3, 3> left, matrix<T, 3, 3
 }
 
 template<class T>
-inline constexpr matrix<T, 4, 4> operator /(matrix<T, 4, 4> left, matrix<T, 4, 4> right) {
+inline B_CONSTEXPR matrix<T, 4, 4> operator /(matrix<T, 4, 4> left, matrix<T, 4, 4> right) {
 	return matrix<T, 4, 4>(
 		left.col[0] / right.col[0],
 		left.col[1] / right.col[1],
@@ -1463,14 +1591,14 @@ inline constexpr matrix<T, 4, 4> operator /(matrix<T, 4, 4> left, matrix<T, 4, 4
 }
 
 template<class T>
-inline constexpr matrix<T, 2, 2> operator +(matrix<T, 2, 2> left, T right) {
+inline B_CONSTEXPR matrix<T, 2, 2> operator +(matrix<T, 2, 2> left, T right) {
 	return left + matrix<T, 2, 2>(
 		vector<T, 2>(right),
 		vector<T, 2>(right));
 }
 
 template<class T>
-inline constexpr matrix<T, 3, 3> operator +(matrix<T, 3, 3> left, T right) {
+inline B_CONSTEXPR matrix<T, 3, 3> operator +(matrix<T, 3, 3> left, T right) {
 	return left + matrix<T, 3, 3>(
 		vector<T, 3>(right),
 		vector<T, 3>(right),
@@ -1478,7 +1606,7 @@ inline constexpr matrix<T, 3, 3> operator +(matrix<T, 3, 3> left, T right) {
 }
 
 template<class T>
-inline constexpr matrix<T, 4, 4> operator +(matrix<T, 4, 4> left, T right) {
+inline B_CONSTEXPR matrix<T, 4, 4> operator +(matrix<T, 4, 4> left, T right) {
 	return left + matrix<T, 4, 4>(
 		vector<T, 4>(right),
 		vector<T, 4>(right),
@@ -1487,14 +1615,14 @@ inline constexpr matrix<T, 4, 4> operator +(matrix<T, 4, 4> left, T right) {
 }
 
 template<class T>
-inline constexpr matrix<T, 2, 2> operator -(matrix<T, 2, 2> left, T right) {
+inline B_CONSTEXPR matrix<T, 2, 2> operator -(matrix<T, 2, 2> left, T right) {
 	return left - matrix<T, 2, 2>(
 		vector<T, 2>(right),
 		vector<T, 2>(right));
 }
 
 template<class T>
-inline constexpr matrix<T, 3, 3> operator -(matrix<T, 3, 3> left, T right) {
+inline B_CONSTEXPR matrix<T, 3, 3> operator -(matrix<T, 3, 3> left, T right) {
 	return left - matrix<T, 3, 3>(
 		vector<T, 3>(right),
 		vector<T, 3>(right),
@@ -1502,7 +1630,7 @@ inline constexpr matrix<T, 3, 3> operator -(matrix<T, 3, 3> left, T right) {
 }
 
 template<class T>
-inline constexpr matrix<T, 4, 4> operator -(matrix<T, 4, 4> left, T right) {
+inline B_CONSTEXPR matrix<T, 4, 4> operator -(matrix<T, 4, 4> left, T right) {
 	return left - matrix<T, 4, 4>(
 		vector<T, 4>(right),
 		vector<T, 4>(right),
@@ -1511,14 +1639,14 @@ inline constexpr matrix<T, 4, 4> operator -(matrix<T, 4, 4> left, T right) {
 }
 
 template<class T>
-inline constexpr matrix<T, 2, 2> operator *(matrix<T, 2, 2> left, T right) {
+inline B_CONSTEXPR matrix<T, 2, 2> operator *(matrix<T, 2, 2> left, T right) {
 	return matrix<T, 2, 2>(
 		left.col[0] * vector<T, 2>(right),
 		left.col[1] * vector<T, 2>(right));
 }
 
 template<class T>
-inline constexpr matrix<T, 3, 3> operator *(matrix<T, 3, 3> left, T right) {
+inline B_CONSTEXPR matrix<T, 3, 3> operator *(matrix<T, 3, 3> left, T right) {
 	return matrix<T, 3, 3>(
 		left.col[0] * vector<T, 3>(right),
 		left.col[1] * vector<T, 3>(right),
@@ -1526,7 +1654,7 @@ inline constexpr matrix<T, 3, 3> operator *(matrix<T, 3, 3> left, T right) {
 }
 
 template<class T>
-inline constexpr matrix<T, 4, 4> operator *(matrix<T, 4, 4> left, T right) {
+inline B_CONSTEXPR matrix<T, 4, 4> operator *(matrix<T, 4, 4> left, T right) {
 	return matrix<T, 4, 4>(
 		left.col[0] * vector<T, 4>(right),
 		left.col[1] * vector<T, 4>(right),
@@ -1535,14 +1663,14 @@ inline constexpr matrix<T, 4, 4> operator *(matrix<T, 4, 4> left, T right) {
 }
 
 template<class T>
-inline constexpr matrix<T, 2, 2> operator /(matrix<T, 2, 2> left, T right) {
+inline B_CONSTEXPR matrix<T, 2, 2> operator /(matrix<T, 2, 2> left, T right) {
 	return left / matrix<T, 2, 2>(
 		vector<T, 2>(right),
 		vector<T, 2>(right));
 }
 
 template<class T>
-inline constexpr matrix<T, 3, 3> operator /(matrix<T, 3, 3> left, T right) {
+inline B_CONSTEXPR matrix<T, 3, 3> operator /(matrix<T, 3, 3> left, T right) {
 	return left / matrix<T, 3, 3>(
 		vector<T, 3>(right),
 		vector<T, 3>(right),
@@ -1550,7 +1678,7 @@ inline constexpr matrix<T, 3, 3> operator /(matrix<T, 3, 3> left, T right) {
 }
 
 template<class T>
-inline constexpr matrix<T, 4, 4> operator /(matrix<T, 4, 4> left, T right) {
+inline B_CONSTEXPR matrix<T, 4, 4> operator /(matrix<T, 4, 4> left, T right) {
 	return left / matrix<T, 4, 4>(
 		vector<T, 4>(right),
 		vector<T, 4>(right),
@@ -1559,24 +1687,24 @@ inline constexpr matrix<T, 4, 4> operator /(matrix<T, 4, 4> left, T right) {
 }
 
 template<class T, int C, int R>
-inline constexpr matrix<T, C, R> operator +(T left, matrix<T, C, R> right) {
+inline B_CONSTEXPR matrix<T, C, R> operator +(T left, matrix<T, C, R> right) {
 	return right + left;
 }
 
 template<class T, int C, int R>
-inline constexpr matrix<T, C, R> operator *(T left, matrix<T, C, R> right) {
+inline B_CONSTEXPR matrix<T, C, R> operator *(T left, matrix<T, C, R> right) {
 	return right * left;
 }
 
 template<class T>
-inline constexpr matrix<T, 2, 2> operator -(T left, matrix<T, 2, 2> right) {
+inline B_CONSTEXPR matrix<T, 2, 2> operator -(T left, matrix<T, 2, 2> right) {
 	return matrix<T, 2, 2>(
 		vector<T, 2>(left),
 		vector<T, 2>(left)) - right;
 }
 
 template<class T>
-inline constexpr matrix<T, 3, 3> operator -(T left, matrix<T, 3, 3> right) {
+inline B_CONSTEXPR matrix<T, 3, 3> operator -(T left, matrix<T, 3, 3> right) {
 	return matrix<T, 3, 3>(
 		vector<T, 3>(left),
 		vector<T, 3>(left),
@@ -1584,7 +1712,7 @@ inline constexpr matrix<T, 3, 3> operator -(T left, matrix<T, 3, 3> right) {
 }
 
 template<class T>
-inline constexpr matrix<T, 4, 4> operator -(T left, matrix<T, 4, 4> right) {
+inline B_CONSTEXPR matrix<T, 4, 4> operator -(T left, matrix<T, 4, 4> right) {
 	return matrix<T, 4, 4>(
 		vector<T, 4>(left),
 		vector<T, 4>(left),
@@ -1593,14 +1721,14 @@ inline constexpr matrix<T, 4, 4> operator -(T left, matrix<T, 4, 4> right) {
 }
 
 template<class T>
-inline constexpr matrix<T, 2, 2> operator /(T left, matrix<T, 2, 2> right) {
+inline B_CONSTEXPR matrix<T, 2, 2> operator /(T left, matrix<T, 2, 2> right) {
 	return matrix<T, 2, 2>(
 		vector<T, 2>(left),
 		vector<T, 2>(left)) / right;
 }
 
 template<class T>
-inline constexpr matrix<T, 3, 3> operator /(T left, matrix<T, 3, 3> right) {
+inline B_CONSTEXPR matrix<T, 3, 3> operator /(T left, matrix<T, 3, 3> right) {
 	return matrix<T, 3, 3>(
 		vector<T, 3>(left),
 		vector<T, 3>(left),
@@ -1608,7 +1736,7 @@ inline constexpr matrix<T, 3, 3> operator /(T left, matrix<T, 3, 3> right) {
 }
 
 template<class T>
-inline constexpr matrix<T, 4, 4> operator /(T left, matrix<T, 4, 4> right) {
+inline B_CONSTEXPR matrix<T, 4, 4> operator /(T left, matrix<T, 4, 4> right) {
 	return matrix<T, 4, 4>(
 		vector<T, 4>(left),
 		vector<T, 4>(left),
@@ -1617,7 +1745,7 @@ inline constexpr matrix<T, 4, 4> operator /(T left, matrix<T, 4, 4> right) {
 }
 
 template<class T>
-inline constexpr bool operator ==(matrix<T, 2, 2> left, matrix<T, 2, 2> right) {
+inline B_CONSTEXPR bool operator ==(matrix<T, 2, 2> left, matrix<T, 2, 2> right) {
 	return
 		left.col[0].x == right.col[0].x &&
 		left.col[0].y == right.col[0].y &&
@@ -1626,7 +1754,7 @@ inline constexpr bool operator ==(matrix<T, 2, 2> left, matrix<T, 2, 2> right) {
 }
 
 template<class T>
-inline constexpr bool operator ==(matrix<T, 3, 3> left, matrix<T, 3, 3> right) {
+inline B_CONSTEXPR bool operator ==(matrix<T, 3, 3> left, matrix<T, 3, 3> right) {
 	return
 		left.col[0].x == right.col[0].x &&
 		left.col[0].y == right.col[0].y &&
@@ -1640,7 +1768,7 @@ inline constexpr bool operator ==(matrix<T, 3, 3> left, matrix<T, 3, 3> right) {
 }
 
 template<class T>
-inline constexpr bool operator ==(matrix<T, 4, 4> left, matrix<T, 4, 4> right) {
+inline B_CONSTEXPR bool operator ==(matrix<T, 4, 4> left, matrix<T, 4, 4> right) {
 	return
 		left.col[0].x == right.col[0].x &&
 		left.col[0].y == right.col[0].y &&
@@ -1661,7 +1789,7 @@ inline constexpr bool operator ==(matrix<T, 4, 4> left, matrix<T, 4, 4> right) {
 }
 
 template<class T>
-inline constexpr bool operator !=(matrix<T, 2, 2> left, matrix<T, 2, 2> right) {
+inline B_CONSTEXPR bool operator !=(matrix<T, 2, 2> left, matrix<T, 2, 2> right) {
 	return
 		left.col[0].x != right.col[0].x ||
 		left.col[0].y != right.col[0].y ||
@@ -1670,7 +1798,7 @@ inline constexpr bool operator !=(matrix<T, 2, 2> left, matrix<T, 2, 2> right) {
 }
 
 template<class T>
-inline constexpr bool operator !=(matrix<T, 3, 3> left, matrix<T, 3, 3> right) {
+inline B_CONSTEXPR bool operator !=(matrix<T, 3, 3> left, matrix<T, 3, 3> right) {
 	return
 		left.col[0].x != right.col[0].x ||
 		left.col[0].y != right.col[0].y ||
@@ -1684,7 +1812,7 @@ inline constexpr bool operator !=(matrix<T, 3, 3> left, matrix<T, 3, 3> right) {
 }
 
 template<class T>
-inline constexpr bool operator !=(matrix<T, 4, 4> left, matrix<T, 4, 4> right) {
+inline B_CONSTEXPR bool operator !=(matrix<T, 4, 4> left, matrix<T, 4, 4> right) {
 	return
 		left.col[0].x != right.col[0].x ||
 		left.col[0].y != right.col[0].y ||
@@ -1749,7 +1877,7 @@ inline matrix<T, C, R> &operator /=(matrix<T, C, R> &left, T right) {
  */
 
 template<class T>
-inline constexpr quaternion<T> operator +(quaternion<T> q) {
+inline B_CONSTEXPR quaternion<T> operator +(quaternion<T> q) {
 	return quaternion<T>(
 		+q.x,
 		+q.y,
@@ -1758,7 +1886,7 @@ inline constexpr quaternion<T> operator +(quaternion<T> q) {
 }
 
 template<class T>
-inline constexpr quaternion<T> operator -(quaternion<T> q) {
+inline B_CONSTEXPR quaternion<T> operator -(quaternion<T> q) {
 	return quaternion<T>(
 		-q.x,
 		-q.y,
@@ -1767,7 +1895,7 @@ inline constexpr quaternion<T> operator -(quaternion<T> q) {
 }
 
 template<class T> 
-inline constexpr quaternion<T> operator +(quaternion<T> left, quaternion<T> right) {
+inline B_CONSTEXPR quaternion<T> operator +(quaternion<T> left, quaternion<T> right) {
 	return quaternion<T>(
 		left.x + right.x,
 		left.y + right.y,
@@ -1776,7 +1904,7 @@ inline constexpr quaternion<T> operator +(quaternion<T> left, quaternion<T> righ
 }
 
 template<class T>
-inline constexpr quaternion<T> operator -(quaternion<T> left, quaternion<T> right) {
+inline B_CONSTEXPR quaternion<T> operator -(quaternion<T> left, quaternion<T> right) {
 	return quaternion<T>(
 		left.x - right.x,
 		left.y - right.y,
@@ -1785,7 +1913,7 @@ inline constexpr quaternion<T> operator -(quaternion<T> left, quaternion<T> righ
 }
 
 template<class T>
-inline constexpr quaternion<T> operator *(quaternion<T> left, quaternion<T> right) {
+inline B_CONSTEXPR quaternion<T> operator *(quaternion<T> left, quaternion<T> right) {
 	return quaternion<T>(
 		left.w * right.x + left.x * right.w + left.y * right.z - left.z * right.y,
 		left.w * right.y - left.x * right.z + left.y * right.w + left.z * right.x,
@@ -1794,7 +1922,7 @@ inline constexpr quaternion<T> operator *(quaternion<T> left, quaternion<T> righ
 }
 
 template<class T>
-inline constexpr quaternion<T> operator /(quaternion<T> left, quaternion<T> right) {
+inline B_CONSTEXPR quaternion<T> operator /(quaternion<T> left, quaternion<T> right) {
 	return quaternion<T>(
 		left.x / right.x,
 		left.y / right.y,
@@ -1803,7 +1931,7 @@ inline constexpr quaternion<T> operator /(quaternion<T> left, quaternion<T> righ
 }
 
 template<class T>
-inline constexpr quaternion<T> operator +(quaternion<T> left, T right) {
+inline B_CONSTEXPR quaternion<T> operator +(quaternion<T> left, T right) {
 	return quaternion<T>(
 		left.x + right,
 		left.y + right,
@@ -1812,7 +1940,7 @@ inline constexpr quaternion<T> operator +(quaternion<T> left, T right) {
 }
 
 template<class T>
-inline constexpr quaternion<T> operator -(quaternion<T> left, T right) {
+inline B_CONSTEXPR quaternion<T> operator -(quaternion<T> left, T right) {
 	return quaternion<T>(
 		left.x - right,
 		left.y - right,
@@ -1821,7 +1949,7 @@ inline constexpr quaternion<T> operator -(quaternion<T> left, T right) {
 }
 
 template<class T>
-inline constexpr quaternion<T> operator *(quaternion<T> left, T right) {
+inline B_CONSTEXPR quaternion<T> operator *(quaternion<T> left, T right) {
 	return quaternion<T>(
 		left.x * right,
 		left.y * right,
@@ -1830,7 +1958,7 @@ inline constexpr quaternion<T> operator *(quaternion<T> left, T right) {
 }
 
 template<class T>
-inline constexpr quaternion<T> operator /(quaternion<T> left, T right) {
+inline B_CONSTEXPR quaternion<T> operator /(quaternion<T> left, T right) {
 	return quaternion<T>(
 		left.x / right,
 		left.y / right,
@@ -1839,7 +1967,7 @@ inline constexpr quaternion<T> operator /(quaternion<T> left, T right) {
 }
 
 template<class T>
-inline constexpr quaternion<T> operator +(T left, quaternion<T> right) {
+inline B_CONSTEXPR quaternion<T> operator +(T left, quaternion<T> right) {
 	return quaternion<T>(
 		left + right.x,
 		left + right.y,
@@ -1848,7 +1976,7 @@ inline constexpr quaternion<T> operator +(T left, quaternion<T> right) {
 }
 
 template<class T>
-inline constexpr quaternion<T> operator -(T left, quaternion<T> right) {
+inline B_CONSTEXPR quaternion<T> operator -(T left, quaternion<T> right) {
 	return quaternion<T>(
 		left - right.x,
 		left - right.y,
@@ -1857,7 +1985,7 @@ inline constexpr quaternion<T> operator -(T left, quaternion<T> right) {
 }
 
 template<class T>
-inline constexpr quaternion<T> operator *(T left, quaternion<T> right) {
+inline B_CONSTEXPR quaternion<T> operator *(T left, quaternion<T> right) {
 	return quaternion<T>(
 		left * right.x,
 		left * right.y,
@@ -1866,7 +1994,7 @@ inline constexpr quaternion<T> operator *(T left, quaternion<T> right) {
 }
 
 template<class T>
-inline constexpr quaternion<T> operator /(T left, quaternion<T> right) {
+inline B_CONSTEXPR quaternion<T> operator /(T left, quaternion<T> right) {
 	return quaternion<T>(
 		left / right.x,
 		left / right.y,
@@ -1875,7 +2003,7 @@ inline constexpr quaternion<T> operator /(T left, quaternion<T> right) {
 }
 
 template<class T>
-inline constexpr vector<bool, 4> operator ==(quaternion<T> left, quaternion<T> right) {
+inline B_CONSTEXPR vector<bool, 4> operator ==(quaternion<T> left, quaternion<T> right) {
 	return vector<bool, 4>(
 		left.x == right.x,
 		left.y == right.y,
@@ -1884,7 +2012,7 @@ inline constexpr vector<bool, 4> operator ==(quaternion<T> left, quaternion<T> r
 }
 
 template<class T>
-inline constexpr vector<bool, 4> operator !=(quaternion<T> left, quaternion<T> right) {
+inline B_CONSTEXPR vector<bool, 4> operator !=(quaternion<T> left, quaternion<T> right) {
 	return vector<bool, 4>(
 		left.x != right.x,
 		left.y != right.y,
@@ -1951,13 +2079,13 @@ using std::acosh;
 using std::atanh;
 
 template<class T> 
-inline constexpr T radians(T degrees) {
-	return degrees * T(pi64) / T(180);
+inline B_CONSTEXPR T radians(T degrees) {
+	return degrees * T(3.141592653589793) / T(180);
 }
 
 template<class T> 
-inline constexpr T degrees(T radians) {
-	return radians * T(180) / T(pi64);
+inline B_CONSTEXPR T degrees(T radians) {
+	return radians * T(180) / T(3.141592653589793);
 }
 
 /*
@@ -1967,8 +2095,6 @@ inline constexpr T degrees(T radians) {
 using std::pow;
 using std::exp;
 using std::log;
-using std::exp2;
-using std::log2;
 using std::sqrt;
 
 template<class T>
@@ -2003,6 +2129,30 @@ inline vector<T, N> pow(vector<T, N> left, T right) {
 template<class T, int N>
 inline vector<T, N> pow(T left, vector<T, N> right) {
 	return pow(vector<T, N>(left), right);
+}
+
+template<class T>
+inline vector<T, 2> sqrt(vector<T, 2> v) {
+	return vector<T, 2>(
+		sqrt(v.x),
+		sqrt(v.y));
+}
+
+template<class T>
+inline vector<T, 3> sqrt(vector<T, 3> v) {
+	return vector<T, 3>(
+		sqrt(v.x),
+		sqrt(v.y),
+		sqrt(v.z));
+}
+
+template<class T>
+inline vector<T, 4> sqrt(vector<T, 4> v) {
+	return vector<T, 4>(
+		sqrt(v.x),
+		sqrt(v.y),
+		sqrt(v.z),
+		sqrt(v.w));
 }
 
 template<class T>
@@ -2053,6 +2203,11 @@ inline vector<T, 4> log(vector<T, 4> v) {
 		log(v.w));
 }
 
+#ifdef B_MATH_HAS_EXP2_LOG2
+
+using std::exp2;
+using std::log2;
+
 template<class T>
 inline vector<T, 2> exp2(vector<T, 2> v) {
 	return vector<T, 2>(
@@ -2101,29 +2256,7 @@ inline vector<T, 4> log2(vector<T, 4> v) {
 		log2(v.w));
 }
 
-template<class T>
-inline vector<T, 2> sqrt(vector<T, 2> v) {
-	return vector<T, 2>(
-		sqrt(v.x),
-		sqrt(v.y));
-}
-
-template<class T>
-inline vector<T, 3> sqrt(vector<T, 3> v) {
-	return vector<T, 3>(
-		sqrt(v.x),
-		sqrt(v.y),
-		sqrt(v.z));
-}
-
-template<class T>
-inline vector<T, 4> sqrt(vector<T, 4> v) {
-	return vector<T, 4>(
-		sqrt(v.x),
-		sqrt(v.y),
-		sqrt(v.z),
-		sqrt(v.w));
-}
+#endif
 
 /*
  * --- COMMON FUNCTIONS ---
@@ -2138,19 +2271,19 @@ using std::isnan;
 using std::isinf;
 
 template<class T>
-inline constexpr T max(T a, T b) {
+inline B_CONSTEXPR T max(T a, T b) {
 	return a > b ? a : b;
 }
 
 template<class T>
-inline constexpr vector<T, 2> max(vector<T, 2> a, vector<T, 2> b) {
+inline B_CONSTEXPR vector<T, 2> max(vector<T, 2> a, vector<T, 2> b) {
 	return vector<T, 2>(
 		max(a.x, b.x),
 		max(a.y, b.y));
 }
 
 template<class T>
-inline constexpr vector<T, 3> max(vector<T, 3> a, vector<T, 3> b) {
+inline B_CONSTEXPR vector<T, 3> max(vector<T, 3> a, vector<T, 3> b) {
 	return vector<T, 3>(
 		max(a.x, b.x),
 		max(a.y, b.y),
@@ -2158,7 +2291,7 @@ inline constexpr vector<T, 3> max(vector<T, 3> a, vector<T, 3> b) {
 }
 
 template<class T>
-inline constexpr vector<T, 4> max(vector<T, 4> a, vector<T, 4> b) {
+inline B_CONSTEXPR vector<T, 4> max(vector<T, 4> a, vector<T, 4> b) {
 	return vector<T, 4>(
 		max(a.x, b.x),
 		max(a.y, b.y),
@@ -2167,29 +2300,29 @@ inline constexpr vector<T, 4> max(vector<T, 4> a, vector<T, 4> b) {
 }
 
 template<class T, int N>
-inline constexpr vector<T, N> max(vector<T, N> a, T b) {
+inline B_CONSTEXPR vector<T, N> max(vector<T, N> a, T b) {
 	return max(a, vector<T, N>(b));
 }
 
 template<class T, int N>
-inline constexpr vector<T, N> max(T a, vector<T, N> b) {
+inline B_CONSTEXPR vector<T, N> max(T a, vector<T, N> b) {
 	return max(vector<T, N>(a), b);
 }
 
 template<class T>
-inline constexpr T min(T a, T b) {
+inline B_CONSTEXPR T min(T a, T b) {
 	return a < b ? a : b;
 }
 
 template<class T>
-inline constexpr vector<T, 2> min(vector<T, 2> a, vector<T, 2> b) {
+inline B_CONSTEXPR vector<T, 2> min(vector<T, 2> a, vector<T, 2> b) {
 	return vector<T, 2>(
 		min(a.x, b.x),
 		min(a.y, b.y));
 }
 
 template<class T>
-inline constexpr vector<T, 3> min(vector<T, 3> a, vector<T, 3> b) {
+inline B_CONSTEXPR vector<T, 3> min(vector<T, 3> a, vector<T, 3> b) {
 	return vector<T, 3>(
 		min(a.x, b.x),
 		min(a.y, b.y),
@@ -2197,7 +2330,7 @@ inline constexpr vector<T, 3> min(vector<T, 3> a, vector<T, 3> b) {
 }
 
 template<class T>
-inline constexpr vector<T, 4> min(vector<T, 4> a, vector<T, 4> b) {
+inline B_CONSTEXPR vector<T, 4> min(vector<T, 4> a, vector<T, 4> b) {
 	return vector<T, 4>(
 		min(a.x, b.x),
 		min(a.y, b.y),
@@ -2206,108 +2339,108 @@ inline constexpr vector<T, 4> min(vector<T, 4> a, vector<T, 4> b) {
 }
 
 template<class T, int N>
-inline constexpr vector<T, N> min(vector<T, N> a, T b) {
+inline B_CONSTEXPR vector<T, N> min(vector<T, N> a, T b) {
 	return min(a, vector<T, N>(b));
 }
 
 template<class T, int N>
-inline constexpr vector<T, N> min(T a, vector<T, N> b) {
+inline B_CONSTEXPR vector<T, N> min(T a, vector<T, N> b) {
 	return min(vector<T, N>(a), b);
 }
 
 template<class T>
-inline constexpr T clamp(T x, T minVal, T maxVal) {
+inline B_CONSTEXPR T clamp(T x, T minVal, T maxVal) {
 	return min(max(x, minVal), maxVal);
 }
 
 template<class T, int N>
-inline constexpr vector<T, N> clamp(vector<T, N> v, vector<T, N> minVal, vector<T, N> maxVal) {
+inline B_CONSTEXPR vector<T, N> clamp(vector<T, N> v, vector<T, N> minVal, vector<T, N> maxVal) {
 	return min(max(v, minVal), maxVal);
 }
 
 template<class T, int N>
-inline constexpr vector<T, N> clamp(vector<T, N> v, T minVal, T maxVal) {
+inline B_CONSTEXPR vector<T, N> clamp(vector<T, N> v, T minVal, T maxVal) {
 	return min(max(v, minVal), maxVal);
 }
 
 template<class T, int N>
-inline constexpr vector<T, N> saturate(vector<T, N> v) {
+inline B_CONSTEXPR vector<T, N> saturate(vector<T, N> v) {
 	return clamp(v, T(0), T(1));
 }
 
 template<class T>
-inline constexpr T compSum(vector<T, 2> v) {
+inline B_CONSTEXPR T compSum(vector<T, 2> v) {
 	return v.x + v.y;
 }
 
 template<class T>
-inline constexpr T compSum(vector<T, 3> v) {
+inline B_CONSTEXPR T compSum(vector<T, 3> v) {
 	return v.x + v.y + v.z;
 }
 
 template<class T>
-inline constexpr T compSum(vector<T, 4> v) {
+inline B_CONSTEXPR T compSum(vector<T, 4> v) {
 	return v.x + v.y + v.z + v.w;
 }
 
 template<class T>
-inline constexpr T compMax(vector<T, 2> v) {
+inline B_CONSTEXPR T compMax(vector<T, 2> v) {
 	return max(v.x, v.y);
 }
 
 template<class T>
-inline constexpr T compMax(vector<T, 3> v) {
+inline B_CONSTEXPR T compMax(vector<T, 3> v) {
 	return max(v.x, max(v.y, v.z));
 }
 
 template<class T>
-inline constexpr T compMax(vector<T, 4> v) {
+inline B_CONSTEXPR T compMax(vector<T, 4> v) {
 	return max(v.x, max(v.y, max(v.z, v.w)));
 }
 
 template<class T>
-inline constexpr T compMin(vector<T, 2> v) {
+inline B_CONSTEXPR T compMin(vector<T, 2> v) {
 	return min(v.x, v.y);
 }
 
 template<class T>
-inline constexpr T compMin(vector<T, 3> v) {
+inline B_CONSTEXPR T compMin(vector<T, 3> v) {
 	return min(v.x, min(v.y, v.z));
 }
 
 template<class T>
-inline constexpr T compMin(vector<T, 4> v) {
+inline B_CONSTEXPR T compMin(vector<T, 4> v) {
 	return min(v.x, min(v.y, min(v.z, v.w)));
 }
 
 template<class T>
-inline constexpr vector<T, 2> abs(vector<T, 2> v) {
+inline B_CONSTEXPR vector<T, 2> abs(vector<T, 2> v) {
 	return vector<T, 2>(
 		v.x < T(0) ? -v.x : v.x,
 		v.y < T(0) ? -v.y : v.y);
 }
 
 template<class T>
-inline constexpr vector<T, 3> abs(vector<T, 3> v) {
+inline B_CONSTEXPR vector<T, 3> abs(vector<T, 3> v) {
 	return vector<T, 3>(
 		v.x < T(0) ? -v.x : v.x,
 		v.y < T(0) ? -v.y : v.y);
 }
 
 template<class T>
-inline constexpr vector<T, 4> abs(vector<T, 4> v) {
+inline B_CONSTEXPR vector<T, 4> abs(vector<T, 4> v) {
 	return vector<T, 4>(
 		v.x < T(0) ? -v.x : v.x,
 		v.y < T(0) ? -v.y : v.y);
 }
 
 template<class T>
-inline constexpr T sign(T x) {
+inline B_CONSTEXPR T sign(T x) {
 	return (x > T(0)) - (x < T(0));
 }
 
 template<class T, int N>
-inline constexpr vector<T, N> sign(vector<T, N> v) {
+inline B_CONSTEXPR vector<T, N> sign(vector<T, N> v) {
 	return vector<T, N>(v > T(0)) - vector<T, N>(v < T(0));
 }
 
@@ -2438,7 +2571,7 @@ inline vector<T, 4> fract(vector<T, 4> v) {
 }
 
 template<class T>
-inline constexpr T mod(T a, T b) {
+inline B_CONSTEXPR T mod(T a, T b) {
 	return a % b;
 }
 
@@ -2485,47 +2618,47 @@ inline vector<T, N> mod(T left, vector<T, N> right) {
 }
 
 template<class T>
-inline constexpr T step(T edge, T x) {
+inline B_CONSTEXPR T step(T edge, T x) {
 	return T(x >= edge);
 }
 
 template<class T, int N>
-inline constexpr vector<T, N> step(vector<T, N> edge, vector<T, N> x) {
+inline B_CONSTEXPR vector<T, N> step(vector<T, N> edge, vector<T, N> x) {
 	return vector<T, N>(x >= edge);
 }
 
 template<class T, int N>
-inline constexpr vector<T, N> step(T edge, vector<T, N> x) {
+inline B_CONSTEXPR vector<T, N> step(T edge, vector<T, N> x) {
 	return vector<T, N>(x >= edge);
 }
 
 template<class T>
-inline constexpr T smoothstep(T edge1, T edge2, T x) {
+inline B_CONSTEXPR T smoothstep(T edge1, T edge2, T x) {
 	T t = clamp((x - edge1) / (edge2 - edge1), T(0), T(1));
 	return t * t * (T(3) - T(2) * t);
 }
 
 template<class T, int N>
-inline constexpr vector<T, N> smoothstep(vector<T, N> edge1, vector<T, N> edge2, vector<T, N> x) {
+inline B_CONSTEXPR vector<T, N> smoothstep(vector<T, N> edge1, vector<T, N> edge2, vector<T, N> x) {
 	vector<T, N> t = clamp((x - edge1) / (edge2 - edge1), T(0), T(1));
 	return t * t * (T(3) - T(2) * t);
 }
 
 template<class T, int N>
-inline constexpr vector<T, N> smoothstep(T edge1, T edge2, vector<T, N> x) {
+inline B_CONSTEXPR vector<T, N> smoothstep(T edge1, T edge2, vector<T, N> x) {
 	vector<T, N> t = clamp((x - edge1) / (edge2 - edge1), T(0), T(1));
 	return t * t * (T(3) - T(2) * t);
 }
 
 template<class T>
-inline constexpr vector<bool, 2> isnan(vector<T, 2> v) {
+inline B_CONSTEXPR vector<bool, 2> isnan(vector<T, 2> v) {
 	return vector<bool, 2>(
 		isnan(v.x),
 		isnan(v.y));
 }
 
 template<class T>
-inline constexpr vector<bool, 3> isnan(vector<T, 3> v) {
+inline B_CONSTEXPR vector<bool, 3> isnan(vector<T, 3> v) {
 	return vector<bool, 3>(
 		isnan(v.x),
 		isnan(v.y),
@@ -2533,7 +2666,7 @@ inline constexpr vector<bool, 3> isnan(vector<T, 3> v) {
 }
 
 template<class T>
-inline constexpr vector<bool, 4> isnan(vector<T, 4> v) {
+inline B_CONSTEXPR vector<bool, 4> isnan(vector<T, 4> v) {
 	return vector<bool, 4>(
 		isnan(v.x),
 		isnan(v.y),
@@ -2542,14 +2675,14 @@ inline constexpr vector<bool, 4> isnan(vector<T, 4> v) {
 }
 
 template<class T>
-inline constexpr vector<bool, 2> isinf(vector<T, 2> v) {
+inline B_CONSTEXPR vector<bool, 2> isinf(vector<T, 2> v) {
 	return vector<bool, 2>(
 		isinf(v.x),
 		isinf(v.y));
 }
 
 template<class T>
-inline constexpr vector<bool, 3> isinf(vector<T, 3> v) {
+inline B_CONSTEXPR vector<bool, 3> isinf(vector<T, 3> v) {
 	return vector<bool, 3>(
 		isinf(v.x),
 		isinf(v.y),
@@ -2557,7 +2690,7 @@ inline constexpr vector<bool, 3> isinf(vector<T, 3> v) {
 }
 
 template<class T>
-inline constexpr vector<bool, 4> isinf(vector<T, 4> v) {
+inline B_CONSTEXPR vector<bool, 4> isinf(vector<T, 4> v) {
 	return vector<bool, 4>(
 		isinf(v.x),
 		isinf(v.y),
@@ -2569,7 +2702,7 @@ inline constexpr vector<bool, 4> isinf(vector<T, 4> v) {
  * --- Color Space Functions ---
  */
 
-inline constexpr vec4 unpackRGBA8(uint r8g8b8a8) {
+inline B_CONSTEXPR vec4 unpackRGBA8(uint r8g8b8a8) {
 	uint r = (r8g8b8a8 >> 24) & 0xFF;
 	uint g = (r8g8b8a8 >> 16) & 0xFF;
 	uint b = (r8g8b8a8 >>  8) & 0xFF;
@@ -2577,7 +2710,7 @@ inline constexpr vec4 unpackRGBA8(uint r8g8b8a8) {
 	return vec4(r, g, b, a) * (1.0f / 255.0f);
 }
 
-inline constexpr uint packRGBA8(vec4 rgba) {
+inline B_CONSTEXPR uint packRGBA8(vec4 rgba) {
 	uint r = uint(rgba.x * 255.5f);
 	uint g = uint(rgba.g * 255.5f);
 	uint b = uint(rgba.b * 255.5f);
@@ -2589,7 +2722,7 @@ inline constexpr uint packRGBA8(vec4 rgba) {
 		(a <<  0);
 }
 
-inline constexpr vec3 HSVtoRGB(vec3 hsv) {
+inline B_CONSTEXPR vec3 HSVtoRGB(vec3 hsv) {
 	float h = hsv.x;
 	float s = hsv.y;
 	float v = hsv.z;
@@ -2608,7 +2741,7 @@ inline constexpr vec3 HSVtoRGB(vec3 hsv) {
 	}
 }
 
-inline constexpr vec3 RGBtoHSV(vec3 rgb) {
+inline B_CONSTEXPR vec3 RGBtoHSV(vec3 rgb) {
 	float min = compMin(rgb);
 	float max = compMax(rgb);
 	if (max == 0)
@@ -2630,12 +2763,12 @@ inline constexpr vec3 RGBtoHSV(vec3 rgb) {
  */
 
 template<class T, int N>
-inline constexpr T dot(vector<T, N> left, vector<T, N> right) {
+inline B_CONSTEXPR T dot(vector<T, N> left, vector<T, N> right) {
 	return compSum(left * right);
 }
 
 template<class T>
-inline constexpr vector<T, 3> cross(vector<T, 3> left, vector<T, 3> right) {
+inline B_CONSTEXPR vector<T, 3> cross(vector<T, 3> left, vector<T, 3> right) {
 	return vector<T, 3>(
 		left.y * right.z - right.y * left.z,
 		left.z * right.x - right.z * left.x,
@@ -2643,12 +2776,12 @@ inline constexpr vector<T, 3> cross(vector<T, 3> left, vector<T, 3> right) {
 }
 
 template<class T, int N>
-inline constexpr T lengthSq(vector<T, N> v) {
+inline B_CONSTEXPR T lengthSq(vector<T, N> v) {
 	return dot(v, v);
 }
 
 template<class T, int N>
-inline constexpr T distanceSq(vector<T, N> p1, vector<T, N> p2) {
+inline B_CONSTEXPR T distanceSq(vector<T, N> p1, vector<T, N> p2) {
 	return lengthSquated(p1 - p2);
 }
 
@@ -2668,12 +2801,12 @@ inline vector<T, N> normalize(vector<T, N> v) {
 }
 
 template<class T, int N>
-inline constexpr vector<T, N> faceforward(vector<T, N> normal, vector<T, N> incidence) {
+inline B_CONSTEXPR vector<T, N> faceforward(vector<T, N> normal, vector<T, N> incidence) {
 	return dot(incidence, normal) < T(0) ? normal : -normal;
 }
 
 template<class T, int N>
-inline constexpr vector<T, N> reflect(vector<T, N> incidence, vector<T, N> normal) {
+inline B_CONSTEXPR vector<T, N> reflect(vector<T, N> incidence, vector<T, N> normal) {
 	return incidence - T(2) * dot(incidence, normal) * normal;
 }
 
@@ -2687,17 +2820,17 @@ inline vector<T, N> refract(vector<T, N> incidence, vector<T, N> normal, T eta) 
 }
 
 template<class T>
-inline constexpr T lerp(T from, T to, T amount) {
+inline B_CONSTEXPR T lerp(T from, T to, T amount) {
 	return from + (to - from) * amount;
 }
 
 template<class T, int N>
-inline constexpr vector<T, N> lerp(vector<T, N> from, vector<T, N> to, vector<T, N> amount) {
+inline B_CONSTEXPR vector<T, N> lerp(vector<T, N> from, vector<T, N> to, vector<T, N> amount) {
 	return from + (to - from) * amount;
 }
 
 template<class T, int N>
-inline constexpr vector<T, N> lerp(vector<T, N> from, vector<T, N> to, T amount) {
+inline B_CONSTEXPR vector<T, N> lerp(vector<T, N> from, vector<T, N> to, T amount) {
 	return from + (to - from) * amount;
 }
 
@@ -2726,14 +2859,14 @@ inline vector<T, 3> slerp(vector<T, 3> from, vector<T, 3> to, T amount) {
  */
 
 template<class T>
-inline constexpr matrix<T, 2, 2> outerProduct(vector<T, 2> left, vector<T, 2> right) {
+inline B_CONSTEXPR matrix<T, 2, 2> outerProduct(vector<T, 2> left, vector<T, 2> right) {
 	return matrix<T, 2, 2>(
 		left.x * right.x, left.y * right.x,
 		left.x * right.y, left.y * right.y);
 }
 
 template<class T>
-inline constexpr matrix<T, 3, 3> outerProduct(vector<T, 3> left, vector<T, 3> right) {
+inline B_CONSTEXPR matrix<T, 3, 3> outerProduct(vector<T, 3> left, vector<T, 3> right) {
 	return matrix<T, 3, 3>(
 		left.x * right.x, left.y * right.x, left.z * right.x,
 		left.x * right.y, left.y * right.y, left.z * right.y,
@@ -2741,7 +2874,7 @@ inline constexpr matrix<T, 3, 3> outerProduct(vector<T, 3> left, vector<T, 3> ri
 }
 
 template<class T>
-inline constexpr matrix<T, 4, 4> outerProduct(vector<T, 4> left, vector<T, 4> right) {
+inline B_CONSTEXPR matrix<T, 4, 4> outerProduct(vector<T, 4> left, vector<T, 4> right) {
 	return matrix<T, 4, 4>(
 		left.x * right.x, left.y * right.x, left.z * right.x, left.w * right.x,
 		left.x * right.y, left.y * right.y, left.z * right.y, left.w * right.y,
@@ -2750,14 +2883,14 @@ inline constexpr matrix<T, 4, 4> outerProduct(vector<T, 4> left, vector<T, 4> ri
 }
 
 template<class T>
-inline constexpr matrix<T, 2, 2> matCompMul(matrix<T, 2, 2> left, matrix<T, 2, 2> right) {
+inline B_CONSTEXPR matrix<T, 2, 2> matCompMul(matrix<T, 2, 2> left, matrix<T, 2, 2> right) {
 	return matrix<T, 2, 2>(
 		left.col[0] * right.col[0],
 		left.col[1] * right.col[1]);
 }
 
 template<class T>
-inline constexpr matrix<T, 3, 3> matCompMul(matrix<T, 3, 3> left, matrix<T, 3, 3> right) {
+inline B_CONSTEXPR matrix<T, 3, 3> matCompMul(matrix<T, 3, 3> left, matrix<T, 3, 3> right) {
 	return matrix<T, 3, 3>(
 		left.col[0] * right.col[0],
 		left.col[1] * right.col[1],
@@ -2765,7 +2898,7 @@ inline constexpr matrix<T, 3, 3> matCompMul(matrix<T, 3, 3> left, matrix<T, 3, 3
 }
 
 template<class T>
-inline constexpr matrix<T, 4, 4> matCompMul(matrix<T, 4, 4> left, matrix<T, 4, 4> right) {
+inline B_CONSTEXPR matrix<T, 4, 4> matCompMul(matrix<T, 4, 4> left, matrix<T, 4, 4> right) {
 	return matrix<T, 4, 4>(
 		left.col[0] * right.col[0],
 		left.col[1] * right.col[1],
@@ -2774,14 +2907,14 @@ inline constexpr matrix<T, 4, 4> matCompMul(matrix<T, 4, 4> left, matrix<T, 4, 4
 }
 
 template<class T>
-inline constexpr matrix<T, 2, 2> transpose(matrix<T, 2, 2> m) {
+inline B_CONSTEXPR matrix<T, 2, 2> transpose(matrix<T, 2, 2> m) {
 	return matrix<T, 2, 2>(
 		m.col[0].x, m.col[1].x,
 		m.col[0].y, m.col[1].y);
 }
 
 template<class T>
-inline constexpr matrix<T, 3, 3> transpose(matrix<T, 3, 3> m) {
+inline B_CONSTEXPR matrix<T, 3, 3> transpose(matrix<T, 3, 3> m) {
 	return matrix<T, 3, 3>(
 		m.col[0].x, m.col[1].x, m.col[2].x,
 		m.col[0].y, m.col[1].y, m.col[2].y,
@@ -2789,7 +2922,7 @@ inline constexpr matrix<T, 3, 3> transpose(matrix<T, 3, 3> m) {
 }
 
 template<class T>
-inline constexpr matrix<T, 4, 4> transpose(matrix<T, 4, 4> m) {
+inline B_CONSTEXPR matrix<T, 4, 4> transpose(matrix<T, 4, 4> m) {
 	return matrix<T, 4, 4>(
 		m.col[0].x, m.col[1].x, m.col[2].x, m.col[3].x,
 		m.col[0].y, m.col[1].y, m.col[2].y, m.col[3].y,
@@ -2798,12 +2931,12 @@ inline constexpr matrix<T, 4, 4> transpose(matrix<T, 4, 4> m) {
 }
 
 template<class T>
-inline constexpr T determinant(matrix<T, 2, 2> m) {
+inline B_CONSTEXPR T determinant(matrix<T, 2, 2> m) {
 	return m.col[0].x * m.col[1].y - m.col[1].x * m.col[0].y;
 }
 
 template<class T>
-inline constexpr T determinant(matrix<T, 3, 3> m) {
+inline B_CONSTEXPR T determinant(matrix<T, 3, 3> m) {
 	return
 		+ m.col[0].x * (m.col[1].y * m.col[2].z - m.col[2].y * m.col[1].z)
 		- m.col[1].x * (m.col[0].y * m.col[2].z - m.col[2].y * m.col[0].z)
@@ -2811,7 +2944,7 @@ inline constexpr T determinant(matrix<T, 3, 3> m) {
 }
 
 template<class T>
-inline constexpr T determinant(matrix<T, 4, 4> m) {
+inline B_CONSTEXPR T determinant(matrix<T, 4, 4> m) {
 	T f0 = m.col[2].z * m.col[3].w - m.col[3].z * m.col[2].w;
 	T f1 = m.col[2].y * m.col[3].w - m.col[3].y * m.col[2].w;
 	T f2 = m.col[2].y * m.col[3].z - m.col[3].y * m.col[2].z;
@@ -2827,7 +2960,7 @@ inline constexpr T determinant(matrix<T, 4, 4> m) {
 }
 
 template<class T>
-inline constexpr matrix<T, 2, 2> inverse(matrix<T, 2, 2> m) {
+inline B_CONSTEXPR matrix<T, 2, 2> inverse(matrix<T, 2, 2> m) {
 	T inverseDet = T(1) / (
 		+ m.col[0].x * m.col[1].y
 		- m.col[1].x * m.col[0].y);
@@ -2840,7 +2973,7 @@ inline constexpr matrix<T, 2, 2> inverse(matrix<T, 2, 2> m) {
 }
 
 template<class T>
-inline constexpr matrix<T, 3, 3> inverse(matrix<T, 3, 3> m) {
+inline B_CONSTEXPR matrix<T, 3, 3> inverse(matrix<T, 3, 3> m) {
 	T inverseDet = T(1) / (
 		+ m.col[0].x * (m.col[1].y * m.col[2].z - m.col[2].y * m.col[1].z)
 		- m.col[1].x * (m.col[0].y * m.col[2].z - m.col[2].y * m.col[0].z)
@@ -2859,7 +2992,7 @@ inline constexpr matrix<T, 3, 3> inverse(matrix<T, 3, 3> m) {
 }
 
 template<class T>
-inline constexpr matrix<T, 4, 4> inverse(matrix<T, 4, 4> m) {
+inline B_CONSTEXPR matrix<T, 4, 4> inverse(matrix<T, 4, 4> m) {
 
 	T c00 = m.col[2].z * m.col[3].w - m.col[3].z * m.col[2].w;
 	T c02 = m.col[1].z * m.col[3].w - m.col[3].z * m.col[1].w;
@@ -2916,17 +3049,17 @@ inline constexpr matrix<T, 4, 4> inverse(matrix<T, 4, 4> m) {
 }
 
 template<class T>
-inline constexpr matrix<T, 4, 4> scaleMat(vector<T, 3> xyz) {
+inline B_CONSTEXPR matrix<T, 4, 4> scaleMat(vector<T, 3> xyz) {
 	return matrix<T, 4, 4>(vector<T, 4>(xyz, T(1)));
 }
 
 template<class T>
-inline constexpr matrix<T, 4, 4> scaleMat(T x, T y, T z) {
+inline B_CONSTEXPR matrix<T, 4, 4> scaleMat(T x, T y, T z) {
 	return matrix<T, 4, 4>(vector<T, 4>(x, y, z, T(1)));
 }
 
 template<class T>
-inline constexpr matrix<T, 4, 4> translationMat(vector<T, 3> xyz) {
+inline B_CONSTEXPR matrix<T, 4, 4> translationMat(vector<T, 3> xyz) {
 	return matrix<T, 4, 4>(
 		 T(1),  T(0),  T(0), T(0),
 		 T(0),  T(1),  T(0), T(0),
@@ -2935,7 +3068,7 @@ inline constexpr matrix<T, 4, 4> translationMat(vector<T, 3> xyz) {
 }
 
 template<class T>
-inline constexpr matrix<T, 4, 4> translationMat(T x, T y, T z) {
+inline B_CONSTEXPR matrix<T, 4, 4> translationMat(T x, T y, T z) {
 	return matrix<T, 4, 4>(
 		T(1), T(0), T(0), T(0),
 		T(0), T(1), T(0), T(0),
@@ -3088,27 +3221,27 @@ inline matrix<T, 4, 4> orthoMatLH(
  * --- Vector Relational Functions ---
  */
 
-inline constexpr bool all(bvec2 v) {
+inline B_CONSTEXPR bool all(bvec2 v) {
 	return v.x && v.y;
 }
 
-inline constexpr bool all(bvec3 v) {
+inline B_CONSTEXPR bool all(bvec3 v) {
 	return v.x && v.y && v.z;
 }
 
-inline constexpr bool all(bvec4 v) {
+inline B_CONSTEXPR bool all(bvec4 v) {
 	return v.x && v.y && v.z && v.w;
 }
 
-inline constexpr bool any(bvec2 v) {
+inline B_CONSTEXPR bool any(bvec2 v) {
 	return v.x || v.y;
 }
 
-inline constexpr bool any(bvec3 v) {
+inline B_CONSTEXPR bool any(bvec3 v) {
 	return v.x || v.y || v.z;
 }
 
-inline constexpr bool any(bvec4 v) {
+inline B_CONSTEXPR bool any(bvec4 v) {
 	return v.x || v.y || v.z || v.w;
 }
 
@@ -3118,7 +3251,7 @@ inline bool epsilonEqual(T left, T right, T epsilon) {
 }
 
 template<class T, int N>
-inline constexpr vector<bool, N> epsilonEqual(vector<T, N> left, vector<T, N> right, T epsilon) {
+inline B_CONSTEXPR vector<bool, N> epsilonEqual(vector<T, N> left, vector<T, N> right, T epsilon) {
 	return abs(left - right) <= epsilon;
 }
 
@@ -3128,7 +3261,7 @@ inline bool epsilonNotEqual(T left, T right, T epsilon) {
 }
 
 template<class T, int N>
-inline constexpr vector<bool, N> epsilonNotEqual(vector<T, N> left, vector<T, N> right, T epsilon) {
+inline B_CONSTEXPR vector<bool, N> epsilonNotEqual(vector<T, N> left, vector<T, N> right, T epsilon) {
 	return abs(left - right) > epsilon;
 }
 
@@ -3150,12 +3283,12 @@ inline T angle(quaternion<T> q) {
 }
 
 template<class T>
-inline constexpr quaternion<T> conjugate(quaternion<T> q) {
+inline B_CONSTEXPR quaternion<T> conjugate(quaternion<T> q) {
 	return quaternion<T>(-q.x, -q.y, -q.z, q.w);
 }
 
 template<class T>
-inline constexpr T lengthSq(quaternion<T> q) {
+inline B_CONSTEXPR T lengthSq(quaternion<T> q) {
 	return q.x * q.x + q.y * q.y + q.z * q.z + q.w * q.w;
 }
 
@@ -3170,7 +3303,7 @@ inline quaternion<T> normalize(quaternion<T> q) {
 }
 
 template<class T>
-inline constexpr quaternion<T> inverse(quaternion<T> q) {
+inline B_CONSTEXPR quaternion<T> inverse(quaternion<T> q) {
 	return conjugate(q) / dot(q.xyzw, q.xyzw);
 }
 
@@ -3225,7 +3358,7 @@ inline quaternion<T> rotationQuat(vector<T, 3> from, vector<T, 3> to) {
 			axis = cross(vector<T, 3>(1, 0, 0), from);
 
 		axis = normalize(axis);
-		return rotationQuat(axis, T(pi64));
+		return rotationQuat(axis, T(3.141592653589793));
 	}
 
 	/* from Stan Melax's Game Programming Gems 1 article */
@@ -3242,23 +3375,23 @@ inline quaternion<T> rotationQuat(vector<T, 3> from, vector<T, 3> to) {
 }
 
 template<class T>
-inline constexpr quaternion<T> rotate(quaternion<T> q, quaternion<T> rot) {
+inline B_CONSTEXPR quaternion<T> rotate(quaternion<T> q, quaternion<T> rot) {
 	return rot * q * inverse(rot);
 }
 
 template<class T>
-inline constexpr quaternion<T> rotate(vector<T, 3> v, quaternion<T> rot) {
+inline B_CONSTEXPR quaternion<T> rotate(vector<T, 3> v, quaternion<T> rot) {
 	return rot * quaternion<T>(v, T(0)) * inverse(rot);
 }
 
 template<class T>
-inline constexpr quaternion<T> rotate(vector<T, 3> v, vector<T, 3> axis, T angleRad) {
+inline B_CONSTEXPR quaternion<T> rotate(vector<T, 3> v, vector<T, 3> axis, T angleRad) {
 	quaternion<T> rot = rotationQuat(axis, angleRad);
 	return rotate(v, rot);
 }
 
 template<class T>
-inline constexpr matrix<T, 4, 4> quatToMat(quaternion<T> q) {
+inline B_CONSTEXPR matrix<T, 4, 4> quatToMat(quaternion<T> q) {
 	return matrix<T, 4, 4>(
 		T(1) - T(2) * (q.y * q.y + q.z * q.z),
 		T(2) * (q.x * q.y + q.w * q.z),
@@ -3336,6 +3469,9 @@ B_MATH_END
 
 #undef B_MATH_BEGIN
 #undef B_MATH_END
+#undef B_MATH_HAS_CONSTEXPR
+#undef B_MATH_HAS_EXP2_LOG2
+#undef B_MATH_HAS_DEFAULT_CONSTRUCTOR
 
 #endif /* !B_MATH */
 
