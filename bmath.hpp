@@ -1,5 +1,5 @@
 /*
-  bmath.hpp - v0.2 - public domain math library
+  bmath.hpp - v0.21 - public domain math library
 
   by Blat Blatnik
 
@@ -3111,10 +3111,10 @@ inline matrix<T, 4, 4> lookAtMatRH(vector<T, 3> pos, vector<T, 3> dir, vector<T,
 	vector<T, 3> u = cross(r, f);
 
 	return matrix<T, 4, 4>(
-		r.x, u.x, -f.x, -dot(r, pos),
-		r.y, u.y, -f.y, -dot(u, pos),
-		r.z, u.z, -f.z, +dot(f, pos),
-		T(0), T(0), T(0), T(1));
+		r.x, u.x, -f.x, T(0),
+		r.y, u.y, -f.y, T(0),
+		r.z, u.z, -f.z, T(0),
+		-dot(r, pos), -dot(u, pos), +dot(f, pos), T(1));
 }
 
 template<class T>
@@ -3124,10 +3124,10 @@ inline matrix<T, 4, 4> lookAtMatLH(vector<T, 3> pos, vector<T, 3> dir, vector<T,
 	vector<T, 3> u = cross(r, f);
 
 	return matrix<T, 4, 4>(
-		r.x, u.x, f.x, -dot(r, pos),
-		r.y, u.y, f.y, -dot(u, pos),
-		r.z, u.z, f.z, -dot(f, pos),
-		T(0), T(0), T(0), T(1));
+		r.x, u.x, f.x, T(0),
+		r.y, u.y, f.y, T(0),
+		r.z, u.z, f.z, T(0),
+		-dot(r, pos), -dot(u, pos), -dot(f, pos), T(1));
 }
 
 template<class T>
