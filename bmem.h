@@ -450,7 +450,7 @@ void B_MEM_PREFIX(debugHeapDump)(void) {
 			block->func != block->func0 ||
 			block->time != block->time0) 
 		{
-			t = localtime(&block->time);
+			t = localtime(&block->time0);
 			strftime(timestamp, sizeof(timestamp), "%T", t);
 			printf("   .. realloced from %d bytes @ %s:%d (%s) %s\n",
 				(int)block->size0, block->file0, block->line0, block->func0, timestamp);
