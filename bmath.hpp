@@ -2424,24 +2424,22 @@ template<class T>
 inline B_CONSTEXPR vector<T, 3> abs(vector<T, 3> v) {
 	return vector<T, 3>(
 		v.x < T(0) ? -v.x : v.x,
-		v.y < T(0) ? -v.y : v.y);
+		v.y < T(0) ? -v.y : v.y,
+		v.z < T(0) ? -v.z : v.z);
 }
 
 template<class T>
 inline B_CONSTEXPR vector<T, 4> abs(vector<T, 4> v) {
 	return vector<T, 4>(
 		v.x < T(0) ? -v.x : v.x,
-		v.y < T(0) ? -v.y : v.y);
+		v.y < T(0) ? -v.y : v.y,
+		v.z < T(0) ? -v.z : v.z,
+		v.w < T(0) ? -v.w : v.w);
 }
 
 template<class T>
 inline B_CONSTEXPR T sign(T x) {
-	return (x > T(0)) - (x < T(0));
-}
-
-template<class T, int N>
-inline B_CONSTEXPR vector<T, N> sign(vector<T, N> v) {
-	return vector<T, N>(v > T(0)) - vector<T, N>(v < T(0));
+	return T(x > T(0)) - T(x < T(0));
 }
 
 template<class T>
@@ -2782,7 +2780,7 @@ inline B_CONSTEXPR T lengthSq(vector<T, N> v) {
 
 template<class T, int N>
 inline B_CONSTEXPR T distanceSq(vector<T, N> p1, vector<T, N> p2) {
-	return lengthSquated(p1 - p2);
+	return lengthSq(p1 - p2);
 }
 
 template<class T, int N>
