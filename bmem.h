@@ -295,8 +295,8 @@ static int b__checkForOverrun(void *mem) {
 
 	b__WaterMark *header = (b__WaterMark *)(memory - sizeof(B_MEM_PREFIX(HeapBlockInfo)));
 	b__WaterMark *footer = (b__WaterMark *)(memory + block->size);
-	int headerGood = memcmp(header, "ORHEADER", sizeof(b__WaterMark)) == 0;
-	int footerGood = memcmp(footer, "ORFOOTER", sizeof(b__WaterMark)) == 0;
+	int headerGood = memcmp(header, "MEMHEADR", sizeof(b__WaterMark)) == 0;
+	int footerGood = memcmp(footer, "MEMFOOTR", sizeof(b__WaterMark)) == 0;
 
 	return headerGood && footerGood;
 }
@@ -320,8 +320,8 @@ void *B_MEM_PREFIX(debugAlloc)(size_t size, const char *file, const char *func, 
 
 	b__WaterMark *header = (b__WaterMark *)(mem + sizeof(B_MEM_PREFIX(HeapBlockInfo)));
 	b__WaterMark *footer = (b__WaterMark *)(mem + sizeof(B_MEM_PREFIX(HeapBlockInfo)) + sizeof(b__WaterMark) + size);
-	memcpy(header, "ORHEADER", sizeof(b__WaterMark));
-	memcpy(footer, "ORFOOTER", sizeof(b__WaterMark));
+	memcpy(header, "MEMHEADR", sizeof(b__WaterMark));
+	memcpy(footer, "MEMFOOTR", sizeof(b__WaterMark));
 
 	if (!b__firstHeapBlock) { /* this is the first memory allocation */
 		b__firstHeapBlock = block;
@@ -357,15 +357,15 @@ void *B_MEM_PREFIX(debugRealloc)(void *mem, size_t size, const char *file, const
 	int isOverrun = b__checkForOverrun(mem);
 	B_ASSERT(!isOverrun);
 
-	char *memory = (char *)B_MEM_PREFIX(heapRealloc)(
-		(char *)mem - sizeof(b__WaterMark) - sizeof(B_MEM_PREFIX(HeapBlockInfo)),
+	B_MEM_PREFIX(HeapBlockInfo) *oldBlock = (B_MEM_PREFIX(HeapBlockInfo))((char *)mem - sizeof(b__WaterMark) - sizeof(B_MEM_PREFIX(HeapBlockInfo)));
+	char *memory = (char *)B_MEM_PREFIX(heapRealloc)(oldBlock,
 		size + sizeof(B_MEM_PREFIX(HeapBlockInfo)) + 2 * sizeof(b__WaterMark));
 	B_MEM_PREFIX(HeapBlockInfo) *block = (B_MEM_PREFIX(HeapBlockInfo) *)memory;
 
 	/* block memory address changed so we need to update neighbors */
 	block->prev->next = block;
 	block->next->prev = block;
-	if (block == b__firstHeapBlock)
+	if (oldBlock == b__firstHeapBlock)
 		b__firstHeapBlock = block;
 
 	block->size = size;
@@ -373,6 +373,11 @@ void *B_MEM_PREFIX(debugRealloc)(void *mem, size_t size, const char *file, const
 	block->func = func;
 	block->line = line;
 	block->time = time(NULL);
+	
+	b__WaterMark *header = (b__WaterMark *)(memory + sizeof(B_MEM_PREFIX(HeapBlockInfo)));
+	b__WaterMark *footer = (b__WaterMark *)(memory + sizeof(B_MEM_PREFIX(HeapBlockInfo)) + sizeof(b__WaterMark) + size);
+	memcpy(header, "MEMHEADR", sizeof(b__WaterMark));
+	memcpy(footer, "MEMFOOTR", sizeof(b__WaterMark));
 
 	/* update heap stats.. */
 	size_t size0 = block->size0;
