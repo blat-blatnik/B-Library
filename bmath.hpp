@@ -1,5 +1,5 @@
 /*
-  bmath.hpp - v0.21 - public domain math library
+  bmath.hpp - v0.22 - public domain math library
 
   by Blat Blatnik
 
@@ -3119,7 +3119,7 @@ template<class T>
 inline matrix<T, 4, 4> lookAtMatLH(vector<T, 3> pos, vector<T, 3> dir, vector<T, 3> up) {
 	vector<T, 3> f = normalize(dir);
 	vector<T, 3> r = normalize(cross(up, f));
-	vector<T, 3> u = cross(r, f);
+	vector<T, 3> u = cross(f, r);
 
 	return matrix<T, 4, 4>(
 		r.x, u.x, f.x, T(0),
