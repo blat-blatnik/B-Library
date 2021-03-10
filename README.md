@@ -9,6 +9,7 @@ library                      | latest version | category    | language | LoC  | 
 **[bdebug.h](./bdebug.h)**   | `1.0`          | utility     | C99      |  263 | assertion macro and logging function
 **[bfile.h](./bfile.h)**     | `0.1`          | utility     | C99      |  259 | linux/windows file utilities - dynamically track file changes
 **[brng.h](./brng.h)**       | `0.9`          | utility     | C99      |  212 | simple [PCG generator](https://www.pcg-random.org/index.html) implementation
+**[bcpuid.h](./bcpuid.h)**   | `1.0`          | utility     | C99      |  433 | determine processor features, core count, and cache size at runtime
 
 All C libraries will compile as C++.
 
