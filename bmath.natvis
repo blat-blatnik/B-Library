@@ -45,7 +45,7 @@
   </Type>
 
   <Type Name="vector&lt;bool,3&gt;" Priority="High">
-    <DisplayString>[{(int)x,g} {(int)y,g} {(int)z,g}]</DisplayString>
+    <DisplayString>[{(int)x} {(int)y} {(int)z}]</DisplayString>
     <Expand HideRawView="1">
       <Item Name="x">x</Item>
       <Item Name="y">y</Item>
@@ -54,7 +54,7 @@
   </Type>
 
   <Type Name="vector&lt;bool,4&gt;" Priority="High">
-    <DisplayString>[{(int)x,g} {(int)y,g} {(int)z,g} {(int)w,g}]</DisplayString>
+    <DisplayString>[{(int)x} {(int)y} {(int)z} {(int)w}]</DisplayString>
     <Expand HideRawView="1">
       <Item Name="x">x</Item>
       <Item Name="y">y</Item>
@@ -264,6 +264,22 @@
   <Type Name="quaternion&lt;*&gt;">
     <DisplayString>{w,g} + {x,g}i + {y,g}j + {z,g}k</DisplayString>
     <Expand HideRawView="1">
+      <CustomListItems MaxItemsPerView="1">
+        <!-- calculate length using fast inverse sqrt -->
+        <Variable Name="k" InitialValue="x*x+y*y+z*z+w*w"/>
+        <Variable Name="n" InitialValue="k/2"/>
+        <Variable Name="i" InitialValue="0x5FE6EB50C7B537A9 - ((*(long long *)&amp;k) &gt;&gt; 1)"/>
+        <If Condition="k != 0">
+          <Exec>k = *(double *)&amp;i</Exec>
+          <Exec>k = k * (1.5 - (n * k * k))</Exec>
+          <Exec>k = k * (1.5 - (n * k * k))</Exec>
+          <Exec>k = k * (1.5 - (n * k * k))</Exec>
+          <Item Name="[len]">1/k,g</Item>
+        </If>
+        <If Condition="k == 0">
+          <Item Name="[len]">0.0,g</Item>
+        </If>
+      </CustomListItems>
       <Item Name="x">x,g</Item>
       <Item Name="y">y,g</Item>
       <Item Name="z">z,g</Item>
