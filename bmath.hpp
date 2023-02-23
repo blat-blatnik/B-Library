@@ -1,5 +1,5 @@
 /*
-  bmath.hpp v0.30 - public domain math library by Blat Blatnik
+  bmath.hpp v0.31 - public domain math library by Blat Blatnik
   
   last updated February 2023
 
@@ -204,24 +204,24 @@ struct vector<T, 2> {
 		: x(v.x), y(v.y) {};
 #endif
 
-	template<class T1, class T2> 
-	inline BMATH_CONSTEXPR vector(T1 x, T2 y)
+	template<class X, class Y> 
+	inline BMATH_CONSTEXPR vector(X x, Y y)
 		: x(T(x)), y(T(y)) {}
 
-	template<class T1> 
-	inline BMATH_CONSTEXPR explicit vector(T1 xy)
+	template<class XY> 
+	inline BMATH_CONSTEXPR explicit vector(XY xy)
 		: x(T(xy)), y(T(xy)) {}
 	
-	template<class T1> 
-	inline BMATH_CONSTEXPR explicit vector(vector<T1, 2> xy)
+	template<class XY> 
+	inline BMATH_CONSTEXPR explicit vector(vector<XY, 2> xy)
 		: x(T(xy.x)), y(T(xy.y)) {}
 	
-	template<class T1> 
-	inline BMATH_CONSTEXPR explicit vector(vector<T1, 3> xy)
+	template<class XY>
+	inline BMATH_CONSTEXPR explicit vector(vector<XY, 3> xy)
 		: x(T(xy.x)), y(T(xy.y)) {}
 
-	template<class T1> 
-	inline BMATH_CONSTEXPR explicit vector(vector<T1, 4> xy)
+	template<class XY>
+	inline BMATH_CONSTEXPR explicit vector(vector<XY, 4> xy)
 		: x(T(xy.x)), y(T(xy.y)) {}
 
 	inline T &operator[](int index) {
@@ -251,32 +251,32 @@ struct vector<T, 3> {
 		: x(v.x), y(v.y), z(v.z) {};
 #endif
 
-	template<class T1, class T2, class T3> 
-	inline BMATH_CONSTEXPR vector(T1 x, T2 y, T3 z)
+	template<class X, class Y, class Z> 
+	inline BMATH_CONSTEXPR vector(X x, Y y, Z z)
 		: x(T(x)), y(T(y)), z(T(z)) {}
 	
-	template<class T1, class T2> 
-	inline BMATH_CONSTEXPR vector(vector<T1, 2> xy, T2 z)
+	template<class XY, class Z> 
+	inline BMATH_CONSTEXPR vector(vector<XY, 2> xy, Z z)
 		: x(T(xy.x)), y(T(xy.y)), z(T(z)) {}
 	
-	template<class T1, class T2> 
-	inline BMATH_CONSTEXPR vector(T1 x, vector<T2, 2> yz)
+	template<class X, class YZ> 
+	inline BMATH_CONSTEXPR vector(X x, vector<YZ, 2> yz)
 		: x(T(x)), y(T(yz.x)), z(T(yz.y)) {}
 	
-	template<class T1> 
-	inline BMATH_CONSTEXPR explicit vector(T1 xyz)
+	template<class XYX> 
+	inline BMATH_CONSTEXPR explicit vector(XYX xyz)
 		: x(T(xyz)), y(T(xyz)), z(T(xyz)) {}
 	
-	template<class T1> 
-	inline BMATH_CONSTEXPR explicit vector(vector<T1, 2> xy)
+	template<class XY> 
+	inline BMATH_CONSTEXPR explicit vector(vector<XY, 2> xy)
 		: x(T(xy.x)), y(T(xy.y)), z(T(0)) {}
 	
-	template<class T1> 
-	inline BMATH_CONSTEXPR explicit vector(vector<T1, 3> xyz)
+	template<class XYZ>
+	inline BMATH_CONSTEXPR explicit vector(vector<XYZ, 3> xyz)
 		: x(T(xyz.x)), y(T(xyz.y)), z(T(xyz.z)) {}
 	
-	template<class T1> 
-	inline BMATH_CONSTEXPR explicit vector(vector<T1, 4> xyz)
+	template<class XYZ>
+	inline BMATH_CONSTEXPR explicit vector(vector<XYZ, 4> xyz)
 		: x(T(xyz.x)), y(T(xyz.y)), z(T(xyz.z)) {}
 
 	inline T &operator[](int index) {
@@ -308,48 +308,48 @@ struct vector<T, 4> {
 		: x(v.x), y(v.y), z(v.z), w(v.w) {};
 #endif
 
-	template<class T1, class T2, class T3, class T4> 
-	inline BMATH_CONSTEXPR vector(T1 x, T2 y, T3 z, T4 w)
+	template<class X, class Y, class Z, class W> 
+	inline BMATH_CONSTEXPR vector(X x, Y y, Z z, W w)
 		: x(T(x)), y(T(y)), z(T(z)), w(T(w)) {}
 	
-	template<class T1, class T2, class T3> 
-	inline BMATH_CONSTEXPR vector(vector<T1, 2> xy, T2 z, T3 w) 
+	template<class XY, class Z, class W> 
+	inline BMATH_CONSTEXPR vector(vector<XY, 2> xy, Z z, W w) 
 		: x(T(xy.x)), y(T(xy.y)), z(T(z)), w(T(w)) {}
 	
-	template<class T1, class T2, class T3> 
-	inline BMATH_CONSTEXPR vector(T1 x, vector<T2, 2> yz, T3 w)
+	template<class X, class YZ, class W> 
+	inline BMATH_CONSTEXPR vector(X x, vector<YZ, 2> yz, W w)
 		: x(T(x)), y(T(yz.x)), z(T(yz.y)), w(T(w)) {}
 	
-	template<class T1, class T2, class T3> 
-	inline BMATH_CONSTEXPR vector(T1 x, T2 y, vector<T3, 2> zw)
+	template<class X, class Y, class ZW> 
+	inline BMATH_CONSTEXPR vector(X x, Y y, vector<ZW, 2> zw)
 		: x(T(x)), y(T(y)), z(T(zw.x)), w(T(zw.y)) {}
 	
-	template<class T1, class T2> 
-	inline BMATH_CONSTEXPR vector(vector<T1, 2> xy, vector<T2, 2> zw)
+	template<class XY, class ZW> 
+	inline BMATH_CONSTEXPR vector(vector<XY, 2> xy, vector<ZW, 2> zw)
 		: x(T(xy.x)), y(T(xy.y)), z(T(zw.x)), w(T(zw.y)) {}
 	
-	template<class T1, class T2> 
-	inline BMATH_CONSTEXPR vector(vector<T1, 3> xyz, T2 w)
+	template<class XYZ, class W> 
+	inline BMATH_CONSTEXPR vector(vector<XYZ, 3> xyz, W w)
 		: x(T(xyz.x)), y(T(xyz.y)), z(T(xyz.z)), w(T(w)) {}
 	
-	template<class T1, class T2> 
-	inline BMATH_CONSTEXPR vector(T1 x, vector<T2, 3> yzw)
+	template<class X, class YZW> 
+	inline BMATH_CONSTEXPR vector(X x, vector<YZW, 3> yzw)
 		: x(T(x)), y(T(yzw.x)), z(T(yzw.y)), w(T(yzw.z)) {}
 	
-	template<class T1> 
-	inline BMATH_CONSTEXPR explicit vector(T1 xyzw)
+	template<class XYZW> 
+	inline BMATH_CONSTEXPR explicit vector(XYZW xyzw)
 		: x(T(xyzw)), y(T(xyzw)), z(T(xyzw)), w(T(xyzw)) {}
 	
-	template<class T1> 
-	inline BMATH_CONSTEXPR explicit vector(vector<T1, 2> xy)
+	template<class XY> 
+	inline BMATH_CONSTEXPR explicit vector(vector<XY, 2> xy)
 		: x(T(xy.x)), y(T(xy.y)), z(T(0)), w(T(0)) {}
 	
-	template<class T1> 
-	inline BMATH_CONSTEXPR explicit vector(vector<T1, 3> xyz)
+	template<class XYZ> 
+	inline BMATH_CONSTEXPR explicit vector(vector<XYZ, 3> xyz)
 		: x(T(xyz.x)), y(T(xyz.y)), z(T(xyz.z)), w(T(0)) {}
 	
-	template<class T1> 
-	inline BMATH_CONSTEXPR explicit vector(vector<T1, 4> xyzw)
+	template<class XYZW> 
+	inline BMATH_CONSTEXPR explicit vector(vector<XYZW, 4> xyzw)
 		: x(T(xyzw.x)), y(T(xyzw.y)), z(T(xyzw.z)), w(T(xyzw.w)) {}
 
 	inline T &operator[](int index) {
@@ -375,49 +375,49 @@ struct matrix<T, 2, 2> {
 #endif
 
 	template<
-		class X1, class Y1,
-		class X2, class Y2>
+		class X0, class Y0,
+		class X1, class Y1>
 	inline BMATH_CONSTEXPR matrix(
-		X1 x1, Y1 y1,
-		X2 x2, Y2 y2)
+		X0 x0, Y0 y0,
+		X1 x1, Y1 y1)
 		: col{
-			vector<T, 2>(x1, y1),
-			vector<T, 2>(x2, y2) } {}
+			vector<T, 2>(x0, y0),
+			vector<T, 2>(x1, y1) } {}
 
 	template<
-		class T1,
-		class T2>
+		class C0,
+		class C1>
 	inline BMATH_CONSTEXPR matrix(
-		vector<T1, 2> col1,
-		vector<T2, 2> col2)
-		: col{ col1, col2 } {}
+		vector<C0, 2> col0,
+		vector<C1, 2> col1)
+		: col{ col0, col1 } {}
 
-	template<class T1> 
-	inline BMATH_CONSTEXPR explicit matrix(matrix<T1, 2, 2> m)
+	template<class M22> 
+	inline BMATH_CONSTEXPR explicit matrix(matrix<M22, 2, 2> m)
 		: col{ 
 			vector<T, 2>(m.col[0]), 
 			vector<T, 2>(m.col[1]) } {}
 
-	template<class T1> 
-	inline BMATH_CONSTEXPR explicit matrix(matrix<T1, 3, 3> m)
+	template<class M33> 
+	inline BMATH_CONSTEXPR explicit matrix(matrix<M33, 3, 3> m)
 		: col{ 
 			vector<T, 2>(m.col[0].xy), 
 			vector<T, 2>(m.col[1].xy) } {}
 
-	template<class T1> 
-	inline BMATH_CONSTEXPR explicit matrix(matrix<T1, 4, 4> m)
+	template<class M44> 
+	inline BMATH_CONSTEXPR explicit matrix(matrix<M44, 4, 4> m)
 		: col{ 
 			vector<T, 2>(m.col[0].xy), 
 			vector<T, 2>(m.col[1].xy) } {}
 
-	template<class T1> 
-	inline BMATH_CONSTEXPR explicit matrix(vector<T1, 2> diag)
+	template<class D> 
+	inline BMATH_CONSTEXPR explicit matrix(vector<D, 2> diag)
 		: col{
 			vector<T, 2>(diag.x,      0), 
 			vector<T, 2>(     0, diag.y) } {}
 	
-	template<class T1> 
-	inline BMATH_CONSTEXPR explicit matrix(T1 diag)
+	template<class D> 
+	inline BMATH_CONSTEXPR explicit matrix(D diag)
 		: col{
 			vector<T, 2>(diag,    0),
 			vector<T, 2>(   0, diag) } {}
@@ -445,62 +445,61 @@ struct matrix<T, 3, 3> {
 #endif
 
 	template<
+		class X0, class Y0, class Z0,
 		class X1, class Y1, class Z1,
-		class X2, class Y2, class Z2,
-		class X3, class Y3, class Z3>
+		class X2, class Y2, class Z2>
 	inline BMATH_CONSTEXPR matrix(
+		X0 x0, Y0 y0, Z0 z0,
 		X1 x1, Y1 y1, Z1 z1,
-		X2 x2, Y2 y2, Z2 z2,
-		X3 x3, Y3 y3, Z3 z3)
+		X2 x2, Y2 y2, Z2 z2)
 		: col{
+			vector<T, 3>(x0, y0, z0),
 			vector<T, 3>(x1, y1, z1),
-			vector<T, 3>(x2, y2, z2),
-			vector<T, 3>(x3, y3, z3)} {}
+			vector<T, 3>(x2, y2, z2)} {}
 
 	template<
-		class T1,
-		class T2,
-		class T3>
+		class C0,
+		class C1,
+		class C2>
 	inline BMATH_CONSTEXPR matrix(
-		vector<T1, 3> col1,
-		vector<T2, 3> col2,
-		vector<T3, 3> col3)
+		vector<C0, 3> col0,
+		vector<C1, 3> col1,
+		vector<C2, 3> col2)
 		: col{ 
+			vector<T, 3>(col0), 
 			vector<T, 3>(col1), 
-			vector<T, 3>(col2), 
-			vector<T, 3>(col3) } {}
+			vector<T, 3>(col2) } {}
 
-	template<class T1> 
-	inline BMATH_CONSTEXPR explicit matrix(matrix<T1, 2, 2> m)
+	template<class M22> 
+	inline BMATH_CONSTEXPR explicit matrix(matrix<M22, 2, 2> m)
 		: col{
 			vector<T, 3>(m.col[0], 0),
 			vector<T, 3>(m.col[1], 0),
 			vector<T, 3>(0,   0,   1) } {}
 	
-	template<class T1> 
-	inline BMATH_CONSTEXPR explicit matrix(matrix<T1, 3, 3> m)
+	template<class M33> 
+	inline BMATH_CONSTEXPR explicit matrix(matrix<M33, 3, 3> m)
 		: col{ 
 			vector<T, 3>(m.col[0]), 
 			vector<T, 3>(m.col[1]), 
 			vector<T, 3>(m.col[2]) } {}
-
 	
-	template<class T1> 
-	inline BMATH_CONSTEXPR explicit matrix(matrix<T1, 4, 4> m)
+	template<class M44> 
+	inline BMATH_CONSTEXPR explicit matrix(matrix<M44, 4, 4> m)
 		: col{ 
 			vector<T, 3>(m.col[0].xyz), 
 			vector<T, 3>(m.col[1].xyz), 
 			vector<T, 3>(m.col[2].xyz) } {}
 	
-	template<class T1> 
-	inline BMATH_CONSTEXPR explicit matrix(vector<T1, 3> diag)
+	template<class D> 
+	inline BMATH_CONSTEXPR explicit matrix(vector<D, 3> diag)
 		: col{
 			vector<T, 3>(diag.x,      0,      0),
 			vector<T, 3>(     0, diag.y,      0),
 			vector<T, 3>(     0,      0, diag.z) } {}
 	
-	template<class T1> 
-	inline BMATH_CONSTEXPR explicit matrix(T1 diag)
+	template<class D> 
+	inline BMATH_CONSTEXPR explicit matrix(D diag)
 		: col{
 			vector<T, 3>(diag,    0,    0),
 			vector<T, 3>(   0, diag,    0),
@@ -529,71 +528,71 @@ struct matrix<T, 4, 4> {
 #endif
 
 	template<
+		class X0, class Y0, class Z0, class W0,
 		class X1, class Y1, class Z1, class W1,
 		class X2, class Y2, class Z2, class W2,
-		class X3, class Y3, class Z3, class W3, 
-		class X4, class Y4, class Z4, class W4>
+		class X3, class Y3, class Z3, class W3>
 	inline BMATH_CONSTEXPR matrix(
+		X0 x0, Y0 y0, Z0 z0, W0 w0,
 		X1 x1, Y1 y1, Z1 z1, W1 w1,
 		X2 x2, Y2 y2, Z2 z2, W2 w2,
-		X3 x3, Y3 y3, Z3 z3, W3 w3,
-		X4 x4, Y4 y4, Z4 z4, W4 w4)
+		X3 x3, Y3 y3, Z3 z3, W3 w3)
 		: col{
+			vector<T, 4>(x0, y0, z0, w0),
 			vector<T, 4>(x1, y1, z1, w1),
 			vector<T, 4>(x2, y2, z2, w2),
-			vector<T, 4>(x3, y3, z3, w3),
-			vector<T, 4>(x4, y4, z4, w4) } {}
+			vector<T, 4>(x3, y3, z3, w3) } {}
 
 	template<
-		class T1,
-		class T2,
-		class T3,
-		class T4>
+		class C0,
+		class C1,
+		class C2,
+		class C3>
 	inline BMATH_CONSTEXPR matrix(
-		vector<T1, 4> col1,
-		vector<T2, 4> col2,
-		vector<T3, 4> col3,
-		vector<T4, 4> col4)
+		vector<C0, 4> col0,
+		vector<C1, 4> col1,
+		vector<C2, 4> col2,
+		vector<C3, 4> col3)
 		: col{ 
+			vector<T, 4>(col0), 
 			vector<T, 4>(col1), 
 			vector<T, 4>(col2), 
-			vector<T, 4>(col3), 
-			vector<T, 4>(col4) } {}
+			vector<T, 4>(col3) } {}
 
-	template<class T1> 
-	inline BMATH_CONSTEXPR explicit matrix(matrix<T1, 2, 2> m)
+	template<class M22> 
+	inline BMATH_CONSTEXPR explicit matrix(matrix<M22, 2, 2> m)
 		: col{
 			vector<T, 4>(m.col[0], 0, 0),
 			vector<T, 4>(m.col[1], 0, 0),
 			vector<T, 4>(0,   0,   1, 1),
 			vector<T, 4>(0,   0,   0, 1) } {}
 
-	template<class T1> 
-	inline BMATH_CONSTEXPR explicit matrix(matrix<T1, 3, 3> m)
+	template<class M33> 
+	inline BMATH_CONSTEXPR explicit matrix(matrix<M33, 3, 3> m)
 		: col{
 			vector<T, 4>(m.col[0], 0),
 			vector<T, 4>(m.col[1], 0),
 			vector<T, 4>(m.col[2], 0),
 			vector<T, 4>(0, 0, 0,  1) } {}
 
-	template<class T1> 
-	inline BMATH_CONSTEXPR explicit matrix(matrix<T1, 4, 4> m)
+	template<class M44> 
+	inline BMATH_CONSTEXPR explicit matrix(matrix<M44, 4, 4> m)
 		: col{
 			vector<T, 4>(m.col[0]),
 			vector<T, 4>(m.col[1]),
 			vector<T, 4>(m.col[2]),
 			vector<T, 4>(m.col[3]) } {}
 
-	template<class T1> 
-	inline BMATH_CONSTEXPR explicit matrix(vector<T1, 4> diag)
+	template<class D> 
+	inline BMATH_CONSTEXPR explicit matrix(vector<D, 4> diag)
 		: col{
 			vector<T, 4>(diag.x,      0,      0,      0),
 			vector<T, 4>(     0, diag.y,      0,      0),
 			vector<T, 4>(     0,      0, diag.z,      0),
 			vector<T, 4>(     0,      0,      0, diag.w) } {}
 
-	template<class T1> 
-	inline BMATH_CONSTEXPR explicit matrix(T1 diag)
+	template<class D> 
+	inline BMATH_CONSTEXPR explicit matrix(D diag)
 		: col{
 			vector<T, 4>(diag,    0,    0,    0),
 			vector<T, 4>(   0, diag,    0,    0),
@@ -627,20 +626,20 @@ struct quaternion {
 		: x(q.x), y(q.y), z(q.z), w(q.w) {};
 #endif
 
-	template<class T1, class T2, class T3, class T4> 
-	inline BMATH_CONSTEXPR quaternion(T1 x, T2 y, T3 z, T4 w)
+	template<class X, class Y, class Z, class W> 
+	inline BMATH_CONSTEXPR quaternion(X x, Y y, Z z, W w)
 		: x(T(x)), y(T(y)), z(T(z)), w(T(w)) {}
 	
-	template<class T1, class T2> 
-	inline BMATH_CONSTEXPR quaternion(vector<T1, 3> xyz, T2 w)
+	template<class XYZ, class W> 
+	inline BMATH_CONSTEXPR quaternion(vector<XYZ, 3> xyz, W w)
 		: x(T(xyz.x)), y(T(xyz.y)), z(T(xyz.z)), w(T(w)) {}
 	
-	template<class T1> 
-	inline BMATH_CONSTEXPR explicit quaternion(vector<T1, 4> xyzw)
+	template<class XYZW> 
+	inline BMATH_CONSTEXPR explicit quaternion(vector<XYZW, 4> xyzw)
 		: x(T(xyzw.x)), y(T(xyzw.y)), z(T(xyzw.z)), w(T(xyzw.w)) {}
 	
-	template<class T1> 
-	inline BMATH_CONSTEXPR explicit quaternion(quaternion<T1> q)
+	template<class XYZW> 
+	inline BMATH_CONSTEXPR explicit quaternion(quaternion<XYZW> q)
 		: x(T(q.x)), y(T(q.y)), z(T(q.z)), w(T(q.w)) {}
 
 	inline T &operator[](int index) {
@@ -3299,7 +3298,7 @@ inline quaternion<T> rotationQuat(vector<T, 3> from, vector<T, 3> to) {
 	vector<T, 3> axis;
 
 	if (cosTheta >= T(0.99999))
-		return quat(T(0), T(0), T(0), T(0));
+		return quat(T(0), T(0), T(0), T(1));
 
 	if (cosTheta < T(-0.99999)) {
 		// special case when vectors in opposite directions :
