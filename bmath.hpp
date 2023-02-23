@@ -1,5 +1,5 @@
 /*
-  bmath.hpp v0.31 - public domain math library by Blat Blatnik
+  bmath.hpp v0.32 - public domain math library by Blat Blatnik
   
   last updated February 2023
 
@@ -3321,10 +3321,10 @@ inline quaternion<T> rotationQuat(vector<T, 3> from, vector<T, 3> to) {
 	T invs = T(1) / s;
 
 	return quaternion<T>(
-		s * T(0.5f),
 		axis.x * invs,
 		axis.y * invs,
-		axis.z * invs);
+		axis.z * invs,
+		s * T(0.5f));
 }
 
 template<class T>
